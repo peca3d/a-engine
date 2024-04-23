@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 """
-Light group key management for Goo Engine (EEVEE)
+Light group key management for A Engine (EEVEE)
 """
 
 import bpy

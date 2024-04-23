@@ -324,7 +324,7 @@ class NODE_MT_category_shader_vector(Menu):
 
 class NODE_MT_category_goo_engine(Menu):
     bl_idname = "NODE_MT_category_goo_engine"
-    bl_label = "Goo Engine"
+    bl_label = "A Engine"
 
     def draw(self, _context):
         layout = self.layout

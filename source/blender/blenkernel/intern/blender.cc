@@ -115,7 +115,7 @@ static void blender_version_init()
     BLI_assert_msg(0, "Invalid Blender version cycle");
   }
 
-  version_cycle = " Goo Engine";
+  version_cycle = " A Engine";
 
   SNPRINTF(blender_version_string,
            "%d.%01d.%d%s",
