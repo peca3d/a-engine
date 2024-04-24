@@ -40,7 +40,7 @@
 #include "BKE_brush.hh"
 #include "BKE_colortools.hh"
 #include "BKE_context.hh"
-#include "BKE_deform.h"
+#include "BKE_deform.hh"
 #include "BKE_editmesh.hh"
 #include "BKE_lib_id.hh"
 #include "BKE_mesh.hh"
@@ -64,7 +64,7 @@
 #include "ED_view3d.hh"
 
 /* For IMB_BlendMode only. */
-#include "IMB_imbuf.h"
+#include "IMB_imbuf.hh"
 
 #include "BKE_ccg.h"
 #include "bmesh.hh"
@@ -314,7 +314,7 @@ void mode_enter_generic(
   BKE_object_free_derived_caches(ob);
 
   if (mode_flag == OB_MODE_VERTEX_PAINT) {
-    const ePaintMode paint_mode = PAINT_MODE_VERTEX;
+    const PaintMode paint_mode = PaintMode::Vertex;
     ED_mesh_color_ensure(mesh, nullptr);
 
     BKE_paint_ensure(scene->toolsettings, (Paint **)&scene->toolsettings->vpaint);
@@ -323,7 +323,7 @@ void mode_enter_generic(
     BKE_paint_init(bmain, scene, paint_mode, PAINT_CURSOR_VERTEX_PAINT);
   }
   else if (mode_flag == OB_MODE_WEIGHT_PAINT) {
-    const ePaintMode paint_mode = PAINT_MODE_WEIGHT;
+    const PaintMode paint_mode = PaintMode::Weight;
 
     BKE_paint_ensure(scene->toolsettings, (Paint **)&scene->toolsettings->wpaint);
     Paint *paint = BKE_paint_get_active_from_paintmode(scene, paint_mode);
@@ -522,7 +522,7 @@ void update_cache_variants(bContext *C, VPaint *vp, Object *ob, PointerRNA *ptr)
    * brush coord/pressure/etc.
    * It's more an events design issue, which doesn't split coordinate/pressure/angle
    * changing events. We should avoid this after events system re-design */
-  if (paint_supports_dynamic_size(brush, PAINT_MODE_SCULPT) || cache->first_time) {
+  if (paint_supports_dynamic_size(brush, PaintMode::Sculpt) || cache->first_time) {
     cache->pressure = RNA_float_get(ptr, "pressure");
   }
 
@@ -533,7 +533,7 @@ void update_cache_variants(bContext *C, VPaint *vp, Object *ob, PointerRNA *ptr)
     BKE_brush_unprojected_radius_set(scene, brush, cache->initial_radius);
   }
 
-  if (BKE_brush_use_size_pressure(brush) && paint_supports_dynamic_size(brush, PAINT_MODE_SCULPT))
+  if (BKE_brush_use_size_pressure(brush) && paint_supports_dynamic_size(brush, PaintMode::Sculpt))
   {
     cache->radius = cache->initial_radius * cache->pressure;
   }
@@ -597,6 +597,24 @@ void smooth_brush_toggle_on(const bContext *C, Paint *paint, StrokeCache *cache)
 /** \} */
 }  // namespace blender::ed::sculpt_paint::vwpaint
 
+static bool color_attribute_supported(const std::optional<bke::AttributeMetaData> meta_data)
+{
+  if (!meta_data) {
+    return false;
+  }
+  if (!(ATTR_DOMAIN_AS_MASK(meta_data->domain) & ATTR_DOMAIN_MASK_COLOR) ||
+      !(CD_TYPE_AS_MASK(meta_data->data_type) & CD_MASK_COLOR_ALL))
+  {
+    return false;
+  }
+  return true;
+}
+
+static bool color_attribute_supported(const Mesh &mesh, const StringRef name)
+{
+  return color_attribute_supported(mesh.attributes().lookup_meta_data(name));
+}
+
 bool vertex_paint_mode_poll(bContext *C)
 {
   const Object *ob = CTX_data_active_object(C);
@@ -609,7 +627,7 @@ bool vertex_paint_mode_poll(bContext *C)
     return false;
   }
 
-  if (!mesh->attributes().contains(mesh->active_color_attribute)) {
+  if (!color_attribute_supported(*mesh, mesh->active_color_attribute)) {
     return false;
   }
 
@@ -991,8 +1009,7 @@ static bool vpaint_stroke_test_start(bContext *C, wmOperator *op, const float mo
 
   const std::optional<bke::AttributeMetaData> meta_data = *mesh->attributes().lookup_meta_data(
       mesh->active_color_attribute);
-
-  if (!meta_data) {
+  if (!color_attribute_supported(meta_data)) {
     return false;
   }
 

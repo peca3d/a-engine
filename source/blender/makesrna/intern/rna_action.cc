@@ -24,11 +24,13 @@
 #include "RNA_define.hh"
 #include "RNA_enum_types.hh"
 
-#include "rna_internal.h"
+#include "rna_internal.hh"
 
 #include "WM_types.hh"
 
 #ifdef RNA_RUNTIME
+
+#  include <algorithm>
 
 #  include "BLI_math_base.h"
 
@@ -224,7 +226,7 @@ static void rna_Action_active_pose_marker_set(PointerRNA *ptr,
 static int rna_Action_active_pose_marker_index_get(PointerRNA *ptr)
 {
   bAction *act = (bAction *)ptr->data;
-  return MAX2(act->active_marker - 1, 0);
+  return std::max(act->active_marker - 1, 0);
 }
 
 static void rna_Action_active_pose_marker_index_set(PointerRNA *ptr, int value)
@@ -367,9 +369,9 @@ static void rna_Action_show_errors_update(bContext *C, PointerRNA * /*ptr*/)
   blender::animrig::reevaluate_fcurve_errors(&ac);
 }
 
-static char *rna_DopeSheet_path(const PointerRNA * /*ptr*/)
+static std::optional<std::string> rna_DopeSheet_path(const PointerRNA * /*ptr*/)
 {
-  return BLI_strdup("dopesheet");
+  return "dopesheet";
 }
 
 #else
@@ -399,7 +401,7 @@ static void rna_def_dopesheet(BlenderRNA *brna)
       prop,
       "Show Data-Block Filters",
       "Show options for whether channels related to certain types of data are included");
-  RNA_def_property_ui_icon(prop, ICON_DISCLOSURE_TRI_RIGHT, 1);
+  RNA_def_property_ui_icon(prop, ICON_RIGHTARROW, 1);
   RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN, nullptr);
 
   /* General Filtering Settings */

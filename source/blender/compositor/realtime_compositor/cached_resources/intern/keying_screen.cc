@@ -13,7 +13,7 @@
 #include "BLI_math_vector_types.hh"
 #include "BLI_vector.hh"
 
-#include "IMB_imbuf.h"
+#include "IMB_imbuf.hh"
 
 #include "DNA_defaults.h"
 #include "DNA_movieclip_types.h"
@@ -44,7 +44,7 @@ KeyingScreenKey::KeyingScreenKey(int frame, float smoothness)
 
 uint64_t KeyingScreenKey::hash() const
 {
-  return get_default_hash_2(frame, smoothness);
+  return get_default_hash(frame, smoothness);
 }
 
 bool operator==(const KeyingScreenKey &a, const KeyingScreenKey &b)

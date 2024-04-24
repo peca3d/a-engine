@@ -34,7 +34,7 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_animsys.h"
-#include "BKE_blender_undo.h"
+#include "BKE_blender_undo.hh"
 #include "BKE_brush.hh"
 #include "BKE_colorband.hh"
 #include "BKE_colortools.hh"
@@ -49,7 +49,7 @@
 
 #include "GHOST_C-api.h"
 
-#include "IMB_colormanagement.h"
+#include "IMB_colormanagement.hh"
 
 #include "ED_screen.hh"
 #include "ED_undo.hh"
@@ -58,7 +58,7 @@
 #include "UI_string_search.hh"
 #include "UI_view2d.hh"
 
-#include "BLF_api.h"
+#include "BLF_api.hh"
 
 #include "interface_intern.hh"
 
@@ -506,7 +506,7 @@ struct uiAfterFunc {
   std::optional<bContextStore> context;
 
   char undostr[BKE_UNDO_STR_MAX];
-  char drawstr[UI_MAX_DRAW_STR];
+  std::string drawstr;
 };
 
 static void button_activate_init(bContext *C,
@@ -794,7 +794,7 @@ static void ui_handle_afterfunc_add_operator_ex(wmOperatorType *ot,
   }
 
   if (context_but) {
-    ui_but_drawstr_without_sep_char(context_but, after->drawstr, sizeof(after->drawstr));
+    after->drawstr = ui_but_drawstr_without_sep_char(context_but);
   }
 }
 
@@ -909,7 +909,7 @@ static void ui_apply_but_func(bContext *C, uiBut *but)
     after->context = *but->context;
   }
 
-  ui_but_drawstr_without_sep_char(but, after->drawstr, sizeof(after->drawstr));
+  after->drawstr = ui_but_drawstr_without_sep_char(but);
 
   but->optype = nullptr;
   but->opcontext = wmOperatorCallContext(0);
@@ -929,11 +929,11 @@ static void ui_apply_but_undo(uiBut *but)
 
   /* define which string to use for undo */
   if (but->type == UI_BTYPE_MENU) {
-    str = but->drawstr;
+    str = but->drawstr.empty() ? nullptr : but->drawstr.c_str();
     str_len_clip = ui_but_drawstr_len_without_sep_char(but);
   }
-  else if (but->drawstr[0]) {
-    str = but->drawstr;
+  else if (!but->drawstr.empty()) {
+    str = but->drawstr.c_str();
     str_len_clip = ui_but_drawstr_len_without_sep_char(but);
   }
   else {
@@ -970,7 +970,7 @@ static void ui_apply_but_undo(uiBut *but)
     /* XXX: disable all undo pushes from UI changes from sculpt mode as they cause memfile undo
      * steps to be written which cause lag: #71434. */
     if (BKE_paintmode_get_active_from_context(static_cast<bContext *>(but->block->evil_C)) ==
-        PAINT_MODE_SCULPT)
+        PaintMode::Sculpt)
     {
       skip_undo = true;
     }
@@ -1001,13 +1001,13 @@ static void ui_apply_but_autokey(bContext *C, uiBut *but)
   }
 
   /* make a little report about what we've done! */
-  char *buf = WM_prop_pystring_assign(C, &but->rnapoin, but->rnaprop, but->rnaindex);
-  if (buf) {
-    BKE_report(CTX_wm_reports(C), RPT_PROPERTY, buf);
-    MEM_freeN(buf);
-
-    WM_event_add_notifier(C, NC_SPACE | ND_SPACE_INFO_REPORT, nullptr);
+  std::optional<const std::string> str = WM_prop_pystring_assign(
+      C, &but->rnapoin, but->rnaprop, but->rnaindex);
+  if (!str.has_value()) {
+    return;
   }
+  BKE_report(CTX_wm_reports(C), RPT_PROPERTY, str.value().c_str());
+  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_INFO_REPORT, nullptr);
 }
 
 static void ui_apply_but_funcs_after(bContext *C)
@@ -1042,7 +1042,7 @@ static void ui_apply_but_funcs_after(bContext *C)
                                                        after.opcontext,
                                                        (after.opptr) ? &opptr : nullptr,
                                                        nullptr,
-                                                       after.drawstr);
+                                                       after.drawstr.c_str());
     }
 
     if (after.opptr) {
@@ -1824,7 +1824,6 @@ static bool ui_selectcontext_begin(bContext *C, uiBut *but, uiSelectContextStore
   PropertyRNA *lprop;
   bool success = false;
 
-  char *path = nullptr;
   ListBase lb = {nullptr};
 
   PointerRNA ptr = but->rnapoin;
@@ -1844,6 +1843,7 @@ static bool ui_selectcontext_begin(bContext *C, uiBut *but, uiSelectContextStore
     const bool is_array = RNA_property_array_check(prop);
     const int rna_type = RNA_property_type(prop);
 
+    std::optional<std::string> path;
     if (UI_context_copy_to_selected_list(C, &ptr, prop, &lb, &use_path_from_id, &path) &&
         !BLI_listbase_is_empty(&lb))
     {
@@ -1856,8 +1856,13 @@ static bool ui_selectcontext_begin(bContext *C, uiBut *but, uiSelectContextStore
           break;
         }
 
-        if (!UI_context_copy_to_selected_check(
-                &ptr, &link->ptr, prop, path, use_path_from_id, &lptr, &lprop))
+        if (!UI_context_copy_to_selected_check(&ptr,
+                                               &link->ptr,
+                                               prop,
+                                               path.has_value() ? path->c_str() : nullptr,
+                                               use_path_from_id,
+                                               &lptr,
+                                               &lprop))
         {
           selctx_data->elems_len -= 1;
           i -= 1;
@@ -1906,7 +1911,6 @@ static bool ui_selectcontext_begin(bContext *C, uiBut *but, uiSelectContextStore
     MEM_SAFE_FREE(selctx_data->elems);
   }
 
-  MEM_SAFE_FREE(path);
   BLI_freelistN(&lb);
 
   /* caller can clear */
@@ -2734,12 +2738,10 @@ static void ui_but_paste_CurveProfile(bContext *C, uiBut *but)
 
 static void ui_but_copy_operator(bContext *C, uiBut *but, char *output, int output_maxncpy)
 {
-  PointerRNA *opptr = UI_but_operator_ptr_get(but);
+  PointerRNA *opptr = UI_but_operator_ptr_ensure(but);
 
-  char *str;
-  str = WM_operator_pystring_ex(C, nullptr, false, true, but->optype, opptr);
-  BLI_strncpy(output, str, output_maxncpy);
-  MEM_freeN(str);
+  std::string str = WM_operator_pystring_ex(C, nullptr, false, true, but->optype, opptr);
+  BLI_strncpy(output, str.c_str(), output_maxncpy);
 }
 
 static bool ui_but_copy_menu(uiBut *but, char *output, int output_maxncpy)
@@ -2946,7 +2948,7 @@ void ui_but_clipboard_free()
 
 static int ui_text_position_from_hidden(uiBut *but, int pos)
 {
-  const char *butstr = (but->editstr) ? but->editstr : but->drawstr;
+  const char *butstr = (but->editstr) ? but->editstr : but->drawstr.c_str();
   const char *strpos = butstr;
   const char *str_end = butstr + strlen(butstr);
   for (int i = 0; i < pos; i++) {
@@ -2958,7 +2960,7 @@ static int ui_text_position_from_hidden(uiBut *but, int pos)
 
 static int ui_text_position_to_hidden(uiBut *but, int pos)
 {
-  const char *butstr = (but->editstr) ? but->editstr : but->drawstr;
+  const char *butstr = (but->editstr) ? but->editstr : but->drawstr.c_str();
   return BLI_strnlen_utf8(butstr, pos);
 }
 
@@ -2970,7 +2972,7 @@ void ui_but_text_password_hide(char password_str[UI_MAX_PASSWORD_STR],
     return;
   }
 
-  char *butstr = (but->editstr) ? but->editstr : but->drawstr;
+  char *butstr = (but->editstr) ? but->editstr : but->drawstr.data();
 
   if (restore) {
     /* restore original string */
@@ -4616,7 +4618,7 @@ static int ui_do_but_HOTKEYEVT(bContext *C,
     if (ELEM(event->type, LEFTMOUSE, EVT_PADENTER, EVT_RETKEY, EVT_BUT_OPEN) &&
         (event->val == KM_PRESS))
     {
-      but->drawstr[0] = 0;
+      but->drawstr.clear();
       hotkey_but->modifier_key = 0;
       button_activate_state(C, but, BUTTON_STATE_WAIT_KEY_EVENT);
       return WM_UI_HANDLER_BREAK;
@@ -5622,6 +5624,7 @@ static bool ui_numedit_but_SLI(uiBut *but,
                                const bool snap,
                                const bool shift)
 {
+  uiButNumberSlider *slider_but = reinterpret_cast<uiButNumberSlider *>(but);
   float cursor_x_range, f, tempf, softmin, softmax, softrange;
   int temp, lvalue;
   bool changed = false;
@@ -5653,7 +5656,7 @@ static bool ui_numedit_but_SLI(uiBut *but,
     const float size = (is_horizontal) ? BLI_rctf_size_x(&but->rect) :
                                          -BLI_rctf_size_y(&but->rect);
     cursor_x_range = size * (but->softmax - but->softmin) /
-                     (but->softmax - but->softmin + but->a1);
+                     (but->softmax - but->softmin + slider_but->step_size);
   }
   else {
     const float ofs = (BLI_rctf_size_y(&but->rect) / 2.0f);
@@ -6396,41 +6399,43 @@ static int ui_do_but_COLOR(bContext *C, uiBut *but, uiHandleButtonData *data, co
         if ((event->modifier & KM_CTRL) == 0) {
           float color[3];
           Paint *paint = BKE_paint_get_active_from_context(C);
-          Brush *brush = BKE_paint_brush(paint);
+          if (paint != nullptr) {
+            Brush *brush = BKE_paint_brush(paint);
 
-          if (brush->flag & BRUSH_USE_GRADIENT) {
-            float *target = &brush->gradient->data[brush->gradient->cur].r;
+            if (brush->flag & BRUSH_USE_GRADIENT) {
+              float *target = &brush->gradient->data[brush->gradient->cur].r;
 
-            if (but->rnaprop && RNA_property_subtype(but->rnaprop) == PROP_COLOR_GAMMA) {
-              RNA_property_float_get_array(&but->rnapoin, but->rnaprop, target);
-              IMB_colormanagement_srgb_to_scene_linear_v3(target, target);
+              if (but->rnaprop && RNA_property_subtype(but->rnaprop) == PROP_COLOR_GAMMA) {
+                RNA_property_float_get_array(&but->rnapoin, but->rnaprop, target);
+                IMB_colormanagement_srgb_to_scene_linear_v3(target, target);
+              }
+              else if (but->rnaprop && RNA_property_subtype(but->rnaprop) == PROP_COLOR) {
+                RNA_property_float_get_array(&but->rnapoin, but->rnaprop, target);
+              }
             }
-            else if (but->rnaprop && RNA_property_subtype(but->rnaprop) == PROP_COLOR) {
-              RNA_property_float_get_array(&but->rnapoin, but->rnaprop, target);
-            }
-          }
-          else {
-            Scene *scene = CTX_data_scene(C);
-            bool updated = false;
+            else {
+              Scene *scene = CTX_data_scene(C);
+              bool updated = false;
 
-            if (but->rnaprop && RNA_property_subtype(but->rnaprop) == PROP_COLOR_GAMMA) {
-              RNA_property_float_get_array(&but->rnapoin, but->rnaprop, color);
-              BKE_brush_color_set(scene, brush, color);
-              updated = true;
-            }
-            else if (but->rnaprop && RNA_property_subtype(but->rnaprop) == PROP_COLOR) {
-              RNA_property_float_get_array(&but->rnapoin, but->rnaprop, color);
-              IMB_colormanagement_scene_linear_to_srgb_v3(color, color);
-              BKE_brush_color_set(scene, brush, color);
-              updated = true;
-            }
+              if (but->rnaprop && RNA_property_subtype(but->rnaprop) == PROP_COLOR_GAMMA) {
+                RNA_property_float_get_array(&but->rnapoin, but->rnaprop, color);
+                BKE_brush_color_set(scene, brush, color);
+                updated = true;
+              }
+              else if (but->rnaprop && RNA_property_subtype(but->rnaprop) == PROP_COLOR) {
+                RNA_property_float_get_array(&but->rnapoin, but->rnaprop, color);
+                IMB_colormanagement_scene_linear_to_srgb_v3(color, color);
+                BKE_brush_color_set(scene, brush, color);
+                updated = true;
+              }
 
-            if (updated) {
-              PropertyRNA *brush_color_prop;
+              if (updated) {
+                PropertyRNA *brush_color_prop;
 
-              PointerRNA brush_ptr = RNA_id_pointer_create(&brush->id);
-              brush_color_prop = RNA_struct_find_property(&brush_ptr, "color");
-              RNA_property_update(C, &brush_ptr, brush_color_prop);
+                PointerRNA brush_ptr = RNA_id_pointer_create(&brush->id);
+                brush_color_prop = RNA_struct_find_property(&brush_ptr, "color");
+                RNA_property_update(C, &brush_ptr, brush_color_prop);
+              }
             }
           }
 
@@ -9769,7 +9774,8 @@ static int ui_handle_list_event(bContext *C, const wmEvent *event, ARegion *regi
 
         for (int i = 0; i < len; i++) {
           if (!dyn_data->items_filter_flags ||
-              ((dyn_data->items_filter_flags[i] & UILST_FLT_ITEM) ^ filter_exclude))
+              (((dyn_data->items_filter_flags[i] & UILST_FLT_ITEM_NEVER_SHOW) == 0) &&
+               (dyn_data->items_filter_flags[i] & UILST_FLT_ITEM) ^ filter_exclude))
           {
             org_order[new_order ? new_order[++org_idx] : ++org_idx] = i;
             if (i == value) {
@@ -10805,7 +10811,7 @@ static int ui_handle_menu_event(bContext *C,
 
             /* Menu search if space-bar or #MenuTypeFlag::SearchOnKeyPress. */
             MenuType *mt = WM_menutype_find(menu->menu_idname, true);
-            if ((mt && bool(mt->flag & MenuTypeFlag::SearchOnKeyPress)) ||
+            if ((mt && bool(mt->flag & MenuTypeFlag::SearchOnKeyPress) && !bool(U.experimental.disable_search_on_keypress)) ||
                 event->type == EVT_SPACEKEY)
             {
               if ((level != 0) && (but == nullptr || !menu->menu_idname[0])) {

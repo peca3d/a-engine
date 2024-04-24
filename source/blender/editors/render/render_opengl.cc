@@ -56,9 +56,8 @@
 #include "ED_view3d.hh"
 #include "ED_view3d_offscreen.hh"
 
-#include "IMB_colormanagement.h"
-#include "IMB_imbuf.h"
-#include "IMB_imbuf_types.h"
+#include "IMB_imbuf.hh"
+#include "IMB_imbuf_types.hh"
 
 #include "RE_pipeline.h"
 
@@ -793,8 +792,12 @@ static bool screen_opengl_render_init(bContext *C, wmOperator *op)
   oglrender->prevar = prevar;
 
   if (is_view_context) {
-    /* so quad view renders camera */
-    ED_view3d_context_user_region(C, &oglrender->v3d, &oglrender->region);
+    /* Prefer rendering camera in quad view if possible. */
+    if (!ED_view3d_context_user_region(C, &oglrender->v3d, &oglrender->region)) {
+      /* If not get region activated by ED_view3d_context_activate earlier. */
+      oglrender->v3d = CTX_wm_view3d(C);
+      oglrender->region = CTX_wm_region(C);
+    }
 
     oglrender->rv3d = static_cast<RegionView3D *>(oglrender->region->regiondata);
 
@@ -1373,7 +1376,7 @@ void RENDER_OT_opengl(wmOperatorType *ot)
       "write_still",
       false,
       "Write Image",
-      "Save rendered the image to the output path (used only when animation is disabled)");
+      "Save the rendered image to the output path (used only when animation is disabled)");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
   prop = RNA_def_boolean(ot->srna,
                          "view_context",

@@ -6,6 +6,7 @@
  * \ingroup bke
  */
 
+#include <algorithm>
 #include <cstdio>
 
 #include "MEM_guardedalloc.h"
@@ -30,7 +31,7 @@
 #include "DNA_screen_types.h"
 
 #include "BKE_colortools.hh"
-#include "BKE_deform.h"
+#include "BKE_deform.hh"
 #include "BKE_gpencil_geom_legacy.h"
 #include "BKE_gpencil_legacy.h"
 #include "BKE_gpencil_modifier_legacy.h"
@@ -227,12 +228,13 @@ GpencilLineartLimitInfo BKE_gpencil_get_lineart_modifier_limits(const Object *ob
     if (md->type == eGpencilModifierType_Lineart) {
       LineartGpencilModifierData *lmd = (LineartGpencilModifierData *)md;
       if (is_first || (lmd->flags & LRT_GPENCIL_USE_CACHE)) {
-        info.min_level = MIN2(info.min_level, lmd->level_start);
-        info.max_level = MAX2(info.max_level,
-                              (lmd->use_multiple_levels ? lmd->level_end : lmd->level_start));
+        info.min_level = std::min<char>(info.min_level, lmd->level_start);
+        info.max_level = std::max<char>(
+            info.max_level, (lmd->use_multiple_levels ? lmd->level_end : lmd->level_start));
         info.edge_types |= lmd->edge_types;
-        info.shadow_selection = MAX2(lmd->shadow_selection, info.shadow_selection);
-        info.silhouette_selection = MAX2(lmd->silhouette_selection, info.silhouette_selection);
+        info.shadow_selection = std::max<char>(lmd->shadow_selection, info.shadow_selection);
+        info.silhouette_selection = std::max<char>(lmd->silhouette_selection,
+                                                   info.silhouette_selection);
         is_first = false;
       }
     }
@@ -961,6 +963,7 @@ void BKE_gpencil_modifier_blend_read_data(BlendDataReader *reader, ListBase *lb,
       BLO_read_data_address(reader, &hmd->curfalloff);
       if (hmd->curfalloff) {
         BKE_curvemapping_blend_read(reader, hmd->curfalloff);
+        BKE_curvemapping_init(hmd->curfalloff);
       }
     }
     else if (md->type == eGpencilModifierType_Noise) {

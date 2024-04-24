@@ -134,9 +134,13 @@ class MetalDevice : public Device {
 
   virtual bool should_use_graphics_interop() override;
 
+  virtual void *get_native_buffer(device_ptr ptr) override;
+
   virtual unique_ptr<DeviceQueue> gpu_queue_create() override;
 
   virtual void build_bvh(BVH *bvh, Progress &progress, bool refit) override;
+
+  virtual void release_bvh(BVH *bvh) override;
 
   virtual void optimize_for_scene(Scene *scene) override;
 

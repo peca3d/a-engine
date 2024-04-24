@@ -16,7 +16,7 @@
 #include "BLI_task.h"
 #include "BLI_threads.h"
 
-#include "BLF_api.h"
+#include "BLF_api.hh"
 
 #include "BLT_translation.h"
 
@@ -30,7 +30,7 @@
 #include "BKE_grease_pencil.h"
 #include "BKE_lattice.hh"
 #include "BKE_main.hh"
-#include "BKE_mball.h"
+#include "BKE_mball.hh"
 #include "BKE_mesh.hh"
 #include "BKE_modifier.hh"
 #include "BKE_object.hh"
@@ -64,8 +64,6 @@
 #include "GPU_state.h"
 #include "GPU_uniform_buffer.h"
 #include "GPU_viewport.h"
-
-#include "IMB_colormanagement.h"
 
 #include "RE_engine.h"
 #include "RE_pipeline.h"
@@ -190,7 +188,7 @@ bool DRW_object_is_renderable(const Object *ob)
   if (ob->type == OB_MESH) {
     if ((ob == DST.draw_ctx.object_edit) || DRW_object_is_in_edit_mode(ob)) {
       View3D *v3d = DST.draw_ctx.v3d;
-      if (v3d && RETOPOLOGY_ENABLED(v3d)) {
+      if (v3d && ((v3d->flag2 & V3D_HIDE_OVERLAYS) == 0) && RETOPOLOGY_ENABLED(v3d)) {
         return false;
       }
     }
@@ -519,6 +517,8 @@ static void drw_manager_init(DRWManager *dst, GPUViewport *viewport, const int s
   RegionView3D *rv3d = dst->draw_ctx.rv3d;
   ARegion *region = dst->draw_ctx.region;
 
+  dst->in_progress = true;
+
   int view = (viewport) ? GPU_viewport_active_view_get(viewport) : 0;
 
   if (!dst->viewport && dst->vmempool) {
@@ -649,6 +649,7 @@ static void drw_manager_exit(DRWManager *dst)
   /* Avoid accidental reuse. */
   drw_state_ensure_not_reused(dst);
 #endif
+  dst->in_progress = false;
 }
 
 DefaultFramebufferList *DRW_viewport_framebuffer_list_get()
@@ -1147,21 +1148,14 @@ void DRW_draw_region_engine_info(int xoffset, int *yoffset, int line_height)
     if (data->info[0] != '\0') {
       const int font_id = BLF_default();
       UI_FontThemeColor(font_id, TH_TEXT_HI);
-
-      BLF_enable(font_id, BLF_SHADOW);
-      BLF_shadow(font_id, 5, blender::float4{0.0f, 0.0f, 0.0f, 1.0f});
-      BLF_shadow_offset(font_id, 1, -1);
-
       const char *buf_step = IFACE_(data->info);
       do {
         const char *buf = buf_step;
         buf_step = BLI_strchr_or_end(buf, '\n');
         const int buf_len = buf_step - buf;
         *yoffset -= line_height;
-        BLF_draw_default(xoffset, *yoffset, 0.0f, buf, buf_len);
+        BLF_draw_default_shadowed(xoffset, *yoffset, 0.0f, buf, buf_len);
       } while (*buf_step ? ((void)buf_step++, true) : false);
-
-      BLF_disable(font_id, BLF_SHADOW);
     }
   }
 }
@@ -1911,6 +1905,12 @@ void DRW_render_gpencil(RenderEngine *engine, Depsgraph *depsgraph)
 
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
   ViewLayer *view_layer = DEG_get_evaluated_view_layer(depsgraph);
+  RenderResult *render_result = RE_engine_get_result(engine);
+  RenderLayer *render_layer = RE_GetRenderLayer(render_result, view_layer->name);
+  if (render_layer == nullptr) {
+    return;
+  }
+
   RenderEngineType *engine_type = engine->type;
   Render *render = engine->re;
 
@@ -1944,8 +1944,6 @@ void DRW_render_gpencil(RenderEngine *engine, Depsgraph *depsgraph)
     BLI_rcti_init(&render_rect, 0, size[0], 0, size[1]);
   }
 
-  RenderResult *render_result = RE_engine_get_result(engine);
-  RenderLayer *render_layer = RE_GetRenderLayer(render_result, view_layer->name);
   for (RenderView *render_view = static_cast<RenderView *>(render_result->views.first);
        render_view != nullptr;
        render_view = render_view->next)
@@ -2939,6 +2937,11 @@ void DRW_draw_depth_object(
   GPU_framebuffer_free(depth_fb);
 }
 
+bool DRW_draw_in_progress()
+{
+  return DST.in_progress;
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -3054,7 +3057,7 @@ void DRW_engines_register()
   RE_engines_register(&DRW_engine_viewport_eevee_type);
   /* Always register EEVEE Next so it can be used in background mode with `--factory-startup`.
    * (Needed for tests). */
-  RE_engines_register(&DRW_engine_viewport_eevee_next_type);
+  // RE_engines_register(&DRW_engine_viewport_eevee_next_type);
 
   RE_engines_register(&DRW_engine_viewport_workbench_type);
 

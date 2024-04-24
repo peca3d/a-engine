@@ -34,13 +34,13 @@
 
 #include "BKE_DerivedMesh.hh"
 #include "BKE_bvhutils.hh"
-#include "BKE_deform.h"
+#include "BKE_deform.hh"
 #include "BKE_editmesh.hh"
 #include "BKE_editmesh_cache.hh"
 #include "BKE_geometry_set.hh"
 #include "BKE_geometry_set_instances.hh"
-#include "BKE_key.h"
-#include "BKE_layer.h"
+#include "BKE_key.hh"
+#include "BKE_layer.hh"
 #include "BKE_lib_id.hh"
 #include "BKE_material.h"
 #include "BKE_mesh.hh"
@@ -1147,7 +1147,10 @@ static void editbmesh_calc_modifiers(Depsgraph *depsgraph,
         mesh_final->edit_mesh = static_cast<BMEditMesh *>(MEM_dupallocN(mesh_cage->edit_mesh));
         mesh_final->edit_mesh->is_shallow_copy = true;
         mesh_final->runtime->is_original_bmesh = true;
-        BKE_mesh_runtime_ensure_edit_data(mesh_final);
+        if (mesh_cage->runtime->edit_data) {
+          mesh_final->runtime->edit_data = std::make_unique<blender::bke::EditMeshData>(
+              *mesh_cage->runtime->edit_data);
+        }
       }
     }
 

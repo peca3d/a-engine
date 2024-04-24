@@ -12,7 +12,7 @@
 
 #include "BLI_assert.h"
 #include "BLI_dynstr.h"
-#include "BLI_hash_mm3.h"
+#include "BLI_hash_mm3.hh"
 #include "BLI_listbase.h"
 #include "BLI_math_vector.h"
 #include "BLI_math_vector_types.hh"
@@ -21,7 +21,7 @@
 #include "BLI_utildefines.h"
 #include "BLI_vector.hh"
 
-#include "IMB_imbuf_types.h"
+#include "IMB_imbuf_types.hh"
 
 #include "GPU_shader.h"
 #include "GPU_texture.h"

@@ -22,7 +22,7 @@
 
 #include "BKE_collection.h"
 #include "BKE_context.hh"
-#include "BKE_layer.h"
+#include "BKE_layer.hh"
 #include "BKE_lib_id.hh"
 #include "BKE_main.hh"
 #include "BKE_material.h"
@@ -451,7 +451,7 @@ void OUTLINER_OT_parent_drop(wmOperatorType *ot)
   /* api callbacks */
   ot->invoke = parent_drop_invoke;
 
-  ot->poll = ED_operator_outliner_active;
+  ot->poll = ED_operator_region_outliner_active;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -609,7 +609,7 @@ void OUTLINER_OT_scene_drop(wmOperatorType *ot)
   /* api callbacks */
   ot->invoke = scene_drop_invoke;
 
-  ot->poll = ED_operator_outliner_active;
+  ot->poll = ED_operator_region_outliner_active;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -662,7 +662,7 @@ void OUTLINER_OT_material_drop(wmOperatorType *ot)
   /* api callbacks */
   ot->invoke = material_drop_invoke;
 
-  ot->poll = ED_operator_outliner_active;
+  ot->poll = ED_operator_region_outliner_active;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -1287,7 +1287,7 @@ static std::string collection_drop_tooltip(bContext *C,
       }
     }
   }
-  return nullptr;
+  return {};
 }
 
 static int collection_drop_invoke(bContext *C, wmOperator * /*op*/, const wmEvent *event)

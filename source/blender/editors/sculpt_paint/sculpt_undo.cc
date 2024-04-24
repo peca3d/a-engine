@@ -50,8 +50,8 @@
 #include "BKE_context.hh"
 #include "BKE_customdata.hh"
 #include "BKE_global.h"
-#include "BKE_key.h"
-#include "BKE_layer.h"
+#include "BKE_key.hh"
+#include "BKE_layer.hh"
 #include "BKE_main.hh"
 #include "BKE_mesh.hh"
 #include "BKE_multires.hh"
@@ -295,7 +295,7 @@ static void update_modified_node_mesh(PBVHNode &node, PartialUpdateData &data)
   if (!data.modified_position_verts.is_empty()) {
     for (const int vert : verts) {
       if (data.modified_position_verts[vert]) {
-        BKE_pbvh_node_mark_normals_update(&node);
+        BKE_pbvh_node_mark_positions_update(&node);
         break;
       }
     }
@@ -393,18 +393,18 @@ static void update_modified_node_grids(PBVHNode &node, PartialUpdateData &data)
   }
 }
 
-static bool test_swap_v3_v3(float a[3], float b[3])
+static bool test_swap_v3_v3(float3 &a, float3 &b)
 {
   /* No need for float comparison here (memory is exactly equal or not). */
   if (memcmp(a, b, sizeof(float[3])) != 0) {
-    swap_v3_v3(a, b);
+    std::swap(a, b);
     return true;
   }
   return false;
 }
 
 static bool restore_deformed(
-    const SculptSession *ss, Node &unode, int uindex, int oindex, float coord[3])
+    const SculptSession *ss, Node &unode, int uindex, int oindex, float3 &coord)
 {
   if (test_swap_v3_v3(coord, unode.orig_position[uindex])) {
     copy_v3_v3(unode.position[uindex], ss->deform_cos[oindex]);
@@ -445,33 +445,35 @@ static bool restore_coords(
     MutableSpan<float3> positions = ss->vert_positions;
 
     if (ss->shapekey_active) {
-      MutableSpan<float3> vertCos(static_cast<float3 *>(ss->shapekey_active->data),
-                                  ss->shapekey_active->totelem);
+      float(*vertCos)[3] = BKE_keyblock_convert_to_vertcos(ob, ss->shapekey_active);
+      MutableSpan key_positions(reinterpret_cast<float3 *>(vertCos), ss->shapekey_active->totelem);
 
       if (!unode.orig_position.is_empty()) {
         if (ss->deform_modifiers_active) {
           for (const int i : index.index_range()) {
-            restore_deformed(ss, unode, i, index[i], vertCos[index[i]]);
+            restore_deformed(ss, unode, i, index[i], key_positions[index[i]]);
           }
         }
         else {
           for (const int i : index.index_range()) {
-            swap_v3_v3(vertCos[index[i]], unode.orig_position[i]);
+            std::swap(key_positions[index[i]], unode.orig_position[i]);
           }
         }
       }
       else {
         for (const int i : index.index_range()) {
-          swap_v3_v3(vertCos[index[i]], unode.position[i]);
+          std::swap(key_positions[index[i]], unode.position[i]);
         }
       }
 
       /* Propagate new coords to keyblock. */
-      SCULPT_vertcos_to_key(ob, ss->shapekey_active, vertCos);
+      SCULPT_vertcos_to_key(ob, ss->shapekey_active, key_positions);
 
       /* PBVH uses its own vertex array, so coords should be */
       /* propagated to PBVH here. */
-      BKE_pbvh_vert_coords_apply(ss->pbvh, vertCos);
+      BKE_pbvh_vert_coords_apply(ss->pbvh, key_positions);
+
+      MEM_freeN(vertCos);
     }
     else {
       if (!unode.orig_position.is_empty()) {
@@ -483,14 +485,14 @@ static bool restore_coords(
         }
         else {
           for (const int i : index.index_range()) {
-            swap_v3_v3(positions[index[i]], unode.orig_position[i]);
+            std::swap(positions[index[i]], unode.orig_position[i]);
             modified_verts[index[i]] = true;
           }
         }
       }
       else {
         for (const int i : index.index_range()) {
-          swap_v3_v3(positions[index[i]], unode.position[i]);
+          std::swap(positions[index[i]], unode.position[i]);
           modified_verts[index[i]] = true;
         }
       }
@@ -593,7 +595,8 @@ static bool restore_color(Object *ob, Node &unode, MutableSpan<bool> modified_ve
   /* NOTE: even with loop colors we still store derived
    * vertex colors for original data lookup. */
   if (!unode.col.is_empty() && unode.loop_col.is_empty()) {
-    BKE_pbvh_swap_colors(ss->pbvh, unode.vert_indices, unode.col);
+    BKE_pbvh_swap_colors(
+        ss->pbvh, unode.vert_indices.as_span().take_front(unode.unique_verts_num), unode.col);
     modified = true;
   }
 
@@ -1402,7 +1405,8 @@ static void store_color(Object *ob, Node *unode)
 
   /* NOTE: even with loop colors we still store (derived)
    * vertex colors for original data lookup. */
-  BKE_pbvh_store_colors_vertex(ss->pbvh, unode->vert_indices, unode->col);
+  BKE_pbvh_store_colors_vertex(
+      ss->pbvh, unode->vert_indices.as_span().take_front(unode->unique_verts_num), unode->col);
 
   if (!unode->loop_col.is_empty() && !unode->corner_indices.is_empty()) {
     BKE_pbvh_store_colors(ss->pbvh, unode->corner_indices, unode->loop_col);
@@ -1740,6 +1744,7 @@ static void set_active_layer(bContext *C, SculptAttrRef *attr)
     mesh->attributes_for_write().add(
         attr->name, attr->domain, attr->type, bke::AttributeInitDefaultValue());
     layer = BKE_id_attribute_find(&mesh->id, attr->name, attr->type, attr->domain);
+    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
   }
 
   if (layer) {
@@ -1843,11 +1848,11 @@ static void sculpt_undosys_step_decode_redo(bContext *C, Depsgraph *depsgraph, S
     us_iter = (SculptUndoStep *)us_iter->step.prev;
   }
   while (us_iter && (us_iter->step.is_applied == false)) {
-    set_active_layer(C, &((SculptUndoStep *)us_iter)->active_color_start);
+    set_active_layer(C, &((SculptUndoStep *)us_iter)->active_color_end);
     sculpt_undosys_step_decode_redo_impl(C, depsgraph, us_iter);
 
     if (us_iter == us) {
-      set_active_layer(C, &((SculptUndoStep *)us_iter)->active_color_end);
+      set_active_layer(C, &((SculptUndoStep *)us_iter)->active_color_start);
       break;
     }
     us_iter = (SculptUndoStep *)us_iter->step.next;
@@ -1990,7 +1995,7 @@ static UndoSculpt *get_nodes()
 
 static bool use_multires_mesh(bContext *C)
 {
-  if (BKE_paintmode_get_active_from_context(C) != PAINT_MODE_SCULPT) {
+  if (BKE_paintmode_get_active_from_context(C) != PaintMode::Sculpt) {
     return false;
   }
 

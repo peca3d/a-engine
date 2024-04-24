@@ -32,6 +32,7 @@
 #include "BKE_brush.hh"
 #include "BKE_ccg.h"
 #include "BKE_context.hh"
+#include "BKE_layer.hh"
 #include "BKE_lib_id.hh"
 #include "BKE_mesh.hh"
 #include "BKE_multires.hh"
@@ -255,7 +256,7 @@ static void fill_mask_mesh(Object &object, const float value, const Span<PBVHNod
     }
   }
 
-  bke::SpanAttributeWriter<float> mask = attributes.lookup_or_add_for_write_only_span<float>(
+  bke::SpanAttributeWriter<float> mask = attributes.lookup_or_add_for_write_span<float>(
       ".sculpt_mask", bke::AttrDomain::Point);
 
   threading::EnumerableThreadSpecific<Vector<int>> all_index_data;
@@ -716,11 +717,6 @@ static void sculpt_gesture_lasso_px_cb(int x, int x_end, int y, void *user_data)
 
 static SculptGestureContext *sculpt_gesture_init_from_lasso(bContext *C, wmOperator *op)
 {
-  SculptGestureContext *sgcontext = MEM_new<SculptGestureContext>(__func__);
-  sgcontext->shape_type = SCULPT_GESTURE_SHAPE_LASSO;
-
-  sculpt_gesture_context_init_common(C, op, sgcontext);
-
   int mcoords_len;
   const int(*mcoords)[2] = WM_gesture_lasso_path_to_array(C, op, &mcoords_len);
 
@@ -728,6 +724,16 @@ static SculptGestureContext *sculpt_gesture_init_from_lasso(bContext *C, wmOpera
     return nullptr;
   }
 
+  /* A single point is equally as invalid for a lasso gesture as no points. */
+  if (mcoords_len == 1) {
+    MEM_freeN((void *)mcoords);
+    return nullptr;
+  }
+
+  SculptGestureContext *sgcontext = MEM_new<SculptGestureContext>(__func__);
+  sgcontext->shape_type = SCULPT_GESTURE_SHAPE_LASSO;
+
+  sculpt_gesture_context_init_common(C, op, sgcontext);
   sgcontext->lasso.projviewobjmat = ED_view3d_ob_project_mat_get(sgcontext->vc.rv3d,
                                                                  sgcontext->vc.obact);
   BLI_lasso_boundbox(&sgcontext->lasso.boundbox, mcoords, mcoords_len);
@@ -1225,7 +1231,7 @@ static void mask_gesture_apply_task(SculptGestureContext *sgcontext,
         undo::push_node(ob, node, undo::Type::Mask);
 
         if (is_multires) {
-          BKE_pbvh_node_mark_normals_update(node);
+          BKE_pbvh_node_mark_positions_update(node);
         }
       }
       const float new_mask = mask_flood_fill_get_new_value_for_elem(
@@ -1527,6 +1533,7 @@ static void sculpt_gesture_trim_geometry_generate(SculptGestureContext *sgcontex
   ARegion *region = vc->region;
 
   const int tot_screen_points = sgcontext->tot_gesture_points;
+  BLI_assert(tot_screen_points > 1);
   float(*screen_points)[2] = sgcontext->gesture_points;
 
   const int trim_totverts = tot_screen_points * 2;
@@ -2021,6 +2028,17 @@ static int paint_mask_gesture_line_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
+static int face_set_gesture_box_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  const View3D *v3d = CTX_wm_view3d(C);
+  const Base *base = CTX_data_active_base(C);
+  if (!BKE_base_is_visible(v3d, base)) {
+    return OPERATOR_CANCELLED;
+  }
+
+  return WM_gesture_box_invoke(C, op, event);
+}
+
 static int face_set_gesture_box_exec(bContext *C, wmOperator *op)
 {
   SculptGestureContext *sgcontext = sculpt_gesture_init_from_box(C, op);
@@ -2031,6 +2049,17 @@ static int face_set_gesture_box_exec(bContext *C, wmOperator *op)
   sculpt_gesture_apply(C, sgcontext, op);
   sculpt_gesture_context_free(sgcontext);
   return OPERATOR_FINISHED;
+}
+
+static int face_set_gesture_lasso_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  const View3D *v3d = CTX_wm_view3d(C);
+  const Base *base = CTX_data_active_base(C);
+  if (!BKE_base_is_visible(v3d, base)) {
+    return OPERATOR_CANCELLED;
+  }
+
+  return WM_gesture_lasso_invoke(C, op, event);
 }
 
 static int face_set_gesture_lasso_exec(bContext *C, wmOperator *op)
@@ -2074,6 +2103,12 @@ static int sculpt_trim_gesture_box_invoke(bContext *C, wmOperator *op, const wmE
 {
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
+
+  const View3D *v3d = CTX_wm_view3d(C);
+  const Base *base = CTX_data_active_base(C);
+  if (!BKE_base_is_visible(v3d, base)) {
+    return OPERATOR_CANCELLED;
+  }
 
   SculptCursorGeometryInfo sgi;
   const float mval_fl[2] = {float(event->mval[0]), float(event->mval[1])};
@@ -2120,6 +2155,12 @@ static int sculpt_trim_gesture_lasso_invoke(bContext *C, wmOperator *op, const w
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
 
+  const View3D *v3d = CTX_wm_view3d(C);
+  const Base *base = CTX_data_active_base(C);
+  if (!BKE_base_is_visible(v3d, base)) {
+    return OPERATOR_CANCELLED;
+  }
+
   SculptCursorGeometryInfo sgi;
   const float mval_fl[2] = {float(event->mval[0]), float(event->mval[1])};
   SCULPT_vertex_random_access_ensure(ss);
@@ -2130,6 +2171,17 @@ static int sculpt_trim_gesture_lasso_invoke(bContext *C, wmOperator *op, const w
   }
 
   return WM_gesture_lasso_invoke(C, op, event);
+}
+
+static int project_line_gesture_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  const View3D *v3d = CTX_wm_view3d(C);
+  const Base *base = CTX_data_active_base(C);
+  if (!BKE_base_is_visible(v3d, base)) {
+    return OPERATOR_CANCELLED;
+  }
+
+  return WM_gesture_straightline_active_side_invoke(C, op, event);
 }
 
 static int project_gesture_line_exec(bContext *C, wmOperator *op)
@@ -2213,7 +2265,7 @@ void SCULPT_OT_face_set_lasso_gesture(wmOperatorType *ot)
   ot->idname = "SCULPT_OT_face_set_lasso_gesture";
   ot->description = "Add face set within the lasso as you move the brush";
 
-  ot->invoke = WM_gesture_lasso_invoke;
+  ot->invoke = face_set_gesture_lasso_invoke;
   ot->modal = WM_gesture_lasso_modal;
   ot->exec = face_set_gesture_lasso_exec;
 
@@ -2232,7 +2284,7 @@ void SCULPT_OT_face_set_box_gesture(wmOperatorType *ot)
   ot->idname = "SCULPT_OT_face_set_box_gesture";
   ot->description = "Add face set within the box as you move the brush";
 
-  ot->invoke = WM_gesture_box_invoke;
+  ot->invoke = face_set_gesture_box_invoke;
   ot->modal = WM_gesture_box_modal;
   ot->exec = face_set_gesture_box_exec;
 
@@ -2293,7 +2345,7 @@ void SCULPT_OT_project_line_gesture(wmOperatorType *ot)
   ot->idname = "SCULPT_OT_project_line_gesture";
   ot->description = "Project the geometry onto a plane defined by a line";
 
-  ot->invoke = WM_gesture_straightline_active_side_invoke;
+  ot->invoke = project_line_gesture_invoke;
   ot->modal = WM_gesture_straightline_oneshot_modal;
   ot->exec = project_gesture_line_exec;
 

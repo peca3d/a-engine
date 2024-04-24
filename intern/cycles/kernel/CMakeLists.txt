@@ -627,7 +627,7 @@ if(WITH_CYCLES_HIP_BINARIES AND WITH_CYCLES_DEVICE_HIP)
 
     set(hip_flags
       ${hip_flags}
-      --amdgpu-target=${arch}
+      --offload-arch=${arch}
       ${HIP_HIPCC_FLAGS}
       --genco
       ${CMAKE_CURRENT_SOURCE_DIR}${hip_kernel_src}
@@ -639,7 +639,6 @@ if(WITH_CYCLES_HIP_BINARIES AND WITH_CYCLES_DEVICE_HIP)
       -I ${CMAKE_CURRENT_SOURCE_DIR}/device/hip
       -Wno-parentheses-equality
       -Wno-unused-value
-      --hipcc-func-supp
       -ffast-math
       ${hip_opt_flags}
       -o ${CMAKE_CURRENT_BINARY_DIR}/${hip_file})
@@ -715,7 +714,6 @@ if(WITH_CYCLES_DEVICE_HIPRT AND WITH_CYCLES_HIP_BINARIES)
     -I ${HIPRT_INCLUDE_DIR}
     -Wno-parentheses-equality
     -Wno-unused-value
-    --hipcc-func-supp
     -ffast-math
     -o ${bitcode_file})
   if(WITH_CYCLES_DEBUG)
@@ -885,7 +883,7 @@ if(WITH_CYCLES_DEVICE_ONEAPI)
 
   # Set defaults for spir64 and spir64_gen options
   if(NOT DEFINED CYCLES_ONEAPI_SYCL_OPTIONS_spir64)
-    set(CYCLES_ONEAPI_SYCL_OPTIONS_spir64 "-options '-ze-opt-regular-grf-kernel integrator_intersect -ze-opt-large-grf-kernel shade -ze-opt-no-local-to-generic'")
+    set(CYCLES_ONEAPI_SYCL_OPTIONS_spir64 "-options '-ze-opt-large-register-file -ze-opt-regular-grf-kernel integrator_intersect -ze-opt-large-grf-kernel shade -ze-opt-no-local-to-generic'")
   endif()
   if(NOT DEFINED CYCLES_ONEAPI_SYCL_OPTIONS_spir64_gen)
     set(CYCLES_ONEAPI_SYCL_OPTIONS_spir64_gen "${CYCLES_ONEAPI_SYCL_OPTIONS_spir64}" CACHE STRING "Extra build options for spir64_gen target")

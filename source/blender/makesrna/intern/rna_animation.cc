@@ -12,6 +12,7 @@
 #include "DNA_anim_types.h"
 #include "DNA_scene_types.h"
 
+#include "BLI_listbase_wrapper.hh"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
@@ -22,7 +23,7 @@
 #include "RNA_define.hh"
 #include "RNA_enum_types.hh"
 
-#include "rna_internal.h"
+#include "rna_internal.hh"
 
 #include "WM_types.hh"
 
@@ -51,6 +52,12 @@ const EnumPropertyItem rna_enum_keying_flag_items[] = {
      0,
      "Visual Keying",
      "Insert keyframes based on 'visual transforms'"},
+    {0,
+     "INSERTKEY_XYZ_TO_RGB",
+     0,
+     "XYZ=RGB Colors (ignored)",
+     "This flag is no longer in use, and is here so that code that uses it doesn't break. The "
+     "XYZ=RGB coloring is determined by the animation preferences"},
     {0, nullptr, 0, nullptr, nullptr},
 };
 
@@ -66,6 +73,12 @@ const EnumPropertyItem rna_enum_keying_flag_api_items[] = {
      0,
      "Visual Keying",
      "Insert keyframes based on 'visual transforms'"},
+    {0,
+     "INSERTKEY_XYZ_TO_RGB",
+     0,
+     "XYZ=RGB Colors (ignored)",
+     "This flag is no longer in use, and is here so that code that uses it doesn't break. The "
+     "XYZ=RGB coloring is determined by the animation preferences"},
     {INSERTKEY_REPLACE,
      "INSERTKEY_REPLACE",
      0,
@@ -86,6 +99,8 @@ const EnumPropertyItem rna_enum_keying_flag_api_items[] = {
 };
 
 #ifdef RNA_RUNTIME
+
+#  include <algorithm>
 
 #  include "BLI_math_base.h"
 
@@ -117,7 +132,7 @@ static void rna_AnimData_dependency_update(Main *bmain, Scene *scene, PointerRNA
   rna_AnimData_update(bmain, scene, ptr);
 }
 
-static int rna_AnimData_action_editable(PointerRNA *ptr, const char ** /*r_info*/)
+static int rna_AnimData_action_editable(const PointerRNA *ptr, const char ** /*r_info*/)
 {
   AnimData *adt = (AnimData *)ptr->data;
   return BKE_animdata_action_editable(adt) ? PROP_EDITABLE : PropertyFlag(0);
@@ -175,6 +190,34 @@ bool rna_AnimData_tweakmode_override_apply(Main * /*bmain*/,
 
   anim_data_dst->flag = (anim_data_dst->flag & ~ADT_NLA_EDIT_ON) |
                         (anim_data_src->flag & ADT_NLA_EDIT_ON);
+
+  if (!(anim_data_dst->flag & ADT_NLA_EDIT_ON)) {
+    /* If tweak mode is not enabled, there's nothing left to do. */
+    return true;
+  }
+
+  if (!anim_data_src->act_track || !anim_data_src->actstrip) {
+    /* If there is not enough information to find the active track/strip, don't bother. */
+    return true;
+  }
+
+  /* AnimData::act_track and AnimData::actstrip are not directly exposed to RNA as editable &
+   * overridable, so the override doesn't contain this info. Reconstruct the pointers by name. */
+  for (NlaTrack *track : blender::ListBaseWrapper<NlaTrack>(anim_data_dst->nla_tracks)) {
+    if (!STREQ(track->name, anim_data_src->act_track->name)) {
+      continue;
+    }
+
+    NlaStrip *strip = BKE_nlastrip_find_by_name(track, anim_data_src->actstrip->name);
+    if (!strip) {
+      continue;
+    }
+
+    anim_data_dst->act_track = track;
+    anim_data_dst->actstrip = strip;
+    break;
+  }
+
   return true;
 }
 
@@ -379,7 +422,7 @@ static StructRNA *rna_ksPath_id_typef(PointerRNA *ptr)
   return ID_code_to_RNA_type(ksp->idtype);
 }
 
-static int rna_ksPath_id_editable(PointerRNA *ptr, const char ** /*r_info*/)
+static int rna_ksPath_id_editable(const PointerRNA *ptr, const char ** /*r_info*/)
 {
   KS_Path *ksp = (KS_Path *)ptr->data;
   return (ksp->idtype) ? PROP_EDITABLE : PropertyFlag(0);
@@ -476,7 +519,7 @@ static void rna_KeyingSet_name_set(PointerRNA *ptr, const char *value)
   STRNCPY(ks->name, value);
 }
 
-static int rna_KeyingSet_active_ksPath_editable(PointerRNA *ptr, const char ** /*r_info*/)
+static int rna_KeyingSet_active_ksPath_editable(const PointerRNA *ptr, const char ** /*r_info*/)
 {
   KeyingSet *ks = (KeyingSet *)ptr->data;
 
@@ -503,7 +546,7 @@ static void rna_KeyingSet_active_ksPath_set(PointerRNA *ptr,
 static int rna_KeyingSet_active_ksPath_index_get(PointerRNA *ptr)
 {
   KeyingSet *ks = (KeyingSet *)ptr->data;
-  return MAX2(ks->active_path - 1, 0);
+  return std::max(ks->active_path - 1, 0);
 }
 
 static void rna_KeyingSet_active_ksPath_index_set(PointerRNA *ptr, int value)

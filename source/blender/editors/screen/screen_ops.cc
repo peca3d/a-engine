@@ -283,6 +283,20 @@ bool ED_operator_outliner_active(bContext *C)
   return ed_spacetype_test(C, SPACE_OUTLINER);
 }
 
+bool ED_operator_region_outliner_active(bContext *C)
+{
+  if (!ED_operator_outliner_active(C)) {
+    CTX_wm_operator_poll_msg_set(C, "Expected an active Outliner");
+    return false;
+  }
+  const ARegion *region = CTX_wm_region(C);
+  if (!(region && region->regiontype == RGN_TYPE_WINDOW)) {
+    CTX_wm_operator_poll_msg_set(C, "Expected an Outliner region");
+    return false;
+  }
+  return true;
+}
+
 bool ED_operator_outliner_active_no_editobject(bContext *C)
 {
   if (ed_spacetype_test(C, SPACE_OUTLINER)) {
@@ -4072,7 +4086,7 @@ static int region_quadview_exec(bContext *C, wmOperator *op)
 
         if (ED_view3d_context_user_region(C, &v3d_user, &region_user)) {
           if (region != region_user) {
-            SWAP(void *, region->regiondata, region_user->regiondata);
+            std::swap(region->regiondata, region_user->regiondata);
             rv3d = static_cast<RegionView3D *>(region->regiondata);
           }
         }
@@ -5572,7 +5586,7 @@ void ED_region_visibility_change_update_animated(bContext *C, ScrArea *area, ARe
     ED_area_init(wm, win, area);
   }
   else {
-    WM_event_remove_handlers(C, &region->handlers);
+    ED_region_visibility_change_update_ex(C, area, region, true, false);
   }
 
   if (region->next) {

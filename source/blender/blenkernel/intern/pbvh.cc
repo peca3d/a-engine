@@ -1281,6 +1281,9 @@ void update_normals(PBVH &pbvh, SubdivCCG *subdiv_ccg)
 {
   Vector<PBVHNode *> nodes = search_gather(
       &pbvh, [&](PBVHNode &node) { return update_search(&node, PBVH_UpdateNormals); });
+  if (nodes.is_empty()) {
+    return;
+  }
 
   if (pbvh.header.type == PBVH_BMESH) {
     bmesh_normals_update(nodes);
@@ -1729,7 +1732,7 @@ void BKE_pbvh_node_mark_redraw(PBVHNode *node)
   node->flag |= PBVH_UpdateDrawBuffers | PBVH_UpdateRedraw;
 }
 
-void BKE_pbvh_node_mark_normals_update(PBVHNode *node)
+void BKE_pbvh_node_mark_positions_update(PBVHNode *node)
 {
   node->flag |= PBVH_UpdateNormals | PBVH_UpdateDrawBuffers | PBVH_UpdateRedraw | PBVH_UpdateBB;
 }

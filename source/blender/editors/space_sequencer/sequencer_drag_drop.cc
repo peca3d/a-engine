@@ -33,8 +33,8 @@
 #include "ED_screen.hh"
 #include "ED_transform.hh"
 
-#include "IMB_imbuf.h"
-#include "IMB_imbuf_types.h"
+#include "IMB_imbuf.hh"
+#include "IMB_imbuf_types.hh"
 
 #include "WM_api.hh"
 #include "WM_types.hh"
@@ -80,7 +80,7 @@ static bool image_drop_poll(bContext * /*C*/, wmDrag *drag, const wmEvent *event
 {
   if (drag->type == WM_DRAG_PATH) {
     const eFileSel_File_Types file_type = eFileSel_File_Types(WM_drag_get_path_file_type(drag));
-    if (ELEM(file_type, 0, FILE_TYPE_IMAGE)) {
+    if (file_type == FILE_TYPE_IMAGE) {
       generic_poll_operations(event, TH_SEQ_IMAGE);
       return true;
     }
@@ -98,7 +98,7 @@ static bool is_movie(wmDrag *drag)
 {
   if (drag->type == WM_DRAG_PATH) {
     const eFileSel_File_Types file_type = eFileSel_File_Types(WM_drag_get_path_file_type(drag));
-    if (ELEM(file_type, 0, FILE_TYPE_MOVIE)) {
+    if (file_type == FILE_TYPE_MOVIE) {
       return true;
     }
   }
@@ -122,7 +122,7 @@ static bool is_sound(wmDrag *drag)
 {
   if (drag->type == WM_DRAG_PATH) {
     const eFileSel_File_Types file_type = eFileSel_File_Types(WM_drag_get_path_file_type(drag));
-    if (ELEM(file_type, 0, FILE_TYPE_SOUND)) {
+    if (file_type == FILE_TYPE_SOUND) {
       return true;
     }
   }
@@ -221,6 +221,50 @@ static float update_overlay_strip_position_data(bContext *C, const int mval[2])
 
 static void sequencer_drop_copy(bContext *C, wmDrag *drag, wmDropBox *drop)
 {
+  if (g_drop_coords.in_use) {
+    if (!g_drop_coords.has_read_mouse_pos) {
+      /* We didn't read the mouse position, so we need to do it manually here. */
+      int xy[2];
+      wmWindow *win = CTX_wm_window(C);
+      xy[0] = win->eventstate->xy[0];
+      xy[1] = win->eventstate->xy[1];
+
+      ARegion *region = CTX_wm_region(C);
+      int mval[2];
+      /* Convert mouse coordinates to region local coordinates. */
+      mval[0] = xy[0] - region->winrct.xmin;
+      mval[1] = xy[1] - region->winrct.ymin;
+
+      update_overlay_strip_position_data(C, mval);
+    }
+
+    RNA_int_set(drop->ptr, "frame_start", g_drop_coords.start_frame);
+    RNA_int_set(drop->ptr, "channel", g_drop_coords.channel);
+    RNA_boolean_set(drop->ptr, "overlap_shuffle_override", true);
+  }
+  else {
+    /* We are dropped inside the preview region. Put the strip on top of the
+     * current displayed frame. */
+    Scene *scene = CTX_data_scene(C);
+    Editing *ed = SEQ_editing_ensure(scene);
+    ListBase *seqbase = SEQ_active_seqbase_get(ed);
+    ListBase *channels = SEQ_channels_displayed_get(ed);
+    SpaceSeq *sseq = CTX_wm_space_seq(C);
+
+    blender::VectorSet strips = SEQ_query_rendered_strips(
+        scene, channels, seqbase, scene->r.cfra, sseq->chanshown);
+
+    /* Get the top most strip channel that is in view. */
+    int max_channel = -1;
+    for (Sequence *seq : strips) {
+      max_channel = max_ii(seq->machine, max_channel);
+    }
+
+    if (max_channel != -1) {
+      RNA_int_set(drop->ptr, "channel", max_channel);
+    }
+  }
+
   ID *id = WM_drag_get_local_ID_or_import_from_asset(C, drag, 0);
   /* ID dropped. */
   if (id != nullptr) {
@@ -266,50 +310,6 @@ static void sequencer_drop_copy(bContext *C, wmDrag *drag, wmDropBox *drop)
       RNA_collection_clear(drop->ptr, "files");
       RNA_collection_add(drop->ptr, "files", &itemptr);
       RNA_string_set(&itemptr, "name", file);
-    }
-  }
-
-  if (g_drop_coords.in_use) {
-    if (!g_drop_coords.has_read_mouse_pos) {
-      /* We didn't read the mouse position, so we need to do it manually here. */
-      int xy[2];
-      wmWindow *win = CTX_wm_window(C);
-      xy[0] = win->eventstate->xy[0];
-      xy[1] = win->eventstate->xy[1];
-
-      ARegion *region = CTX_wm_region(C);
-      int mval[2];
-      /* Convert mouse coordinates to region local coordinates. */
-      mval[0] = xy[0] - region->winrct.xmin;
-      mval[1] = xy[1] - region->winrct.ymin;
-
-      update_overlay_strip_position_data(C, mval);
-    }
-
-    RNA_int_set(drop->ptr, "frame_start", g_drop_coords.start_frame);
-    RNA_int_set(drop->ptr, "channel", g_drop_coords.channel);
-    RNA_boolean_set(drop->ptr, "overlap_shuffle_override", true);
-  }
-  else {
-    /* We are dropped inside the preview region. Put the strip on top of the
-     * current displayed frame. */
-    Scene *scene = CTX_data_scene(C);
-    Editing *ed = SEQ_editing_ensure(scene);
-    ListBase *seqbase = SEQ_active_seqbase_get(ed);
-    ListBase *channels = SEQ_channels_displayed_get(ed);
-    SpaceSeq *sseq = CTX_wm_space_seq(C);
-
-    blender::VectorSet strips = SEQ_query_rendered_strips(
-        scene, channels, seqbase, scene->r.cfra, sseq->chanshown);
-
-    /* Get the top most strip channel that is in view. */
-    int max_channel = -1;
-    for (Sequence *seq : strips) {
-      max_channel = max_ii(seq->machine, max_channel);
-    }
-
-    if (max_channel != -1) {
-      RNA_int_set(drop->ptr, "channel", max_channel);
     }
   }
 }
@@ -537,7 +537,7 @@ static void prefetch_data_fn(void *custom_data, wmJobWorkerStatus * /*worker_sta
   }
 
   char colorspace[64] = "\0"; /* 64 == MAX_COLORSPACE_NAME length. */
-  anim *anim = openanim(job_data->path, IB_rect, 0, colorspace);
+  ImBufAnim *anim = openanim(job_data->path, IB_rect, 0, colorspace);
 
   if (anim != nullptr) {
     g_drop_coords.strip_len = IMB_anim_get_duration(anim, IMB_TC_NONE);
@@ -690,7 +690,7 @@ static bool image_drop_preview_poll(bContext * /*C*/, wmDrag *drag, const wmEven
 {
   if (drag->type == WM_DRAG_PATH) {
     const eFileSel_File_Types file_type = eFileSel_File_Types(WM_drag_get_path_file_type(drag));
-    if (ELEM(file_type, 0, FILE_TYPE_IMAGE)) {
+    if (file_type == FILE_TYPE_IMAGE) {
       return true;
     }
   }
@@ -702,7 +702,7 @@ static bool movie_drop_preview_poll(bContext * /*C*/, wmDrag *drag, const wmEven
 {
   if (drag->type == WM_DRAG_PATH) {
     const eFileSel_File_Types file_type = eFileSel_File_Types(WM_drag_get_path_file_type(drag));
-    if (ELEM(file_type, 0, FILE_TYPE_MOVIE)) {
+    if (file_type == FILE_TYPE_MOVIE) {
       return true;
     }
   }
@@ -714,7 +714,7 @@ static bool sound_drop_preview_poll(bContext * /*C*/, wmDrag *drag, const wmEven
 {
   if (drag->type == WM_DRAG_PATH) {
     const eFileSel_File_Types file_type = eFileSel_File_Types(WM_drag_get_path_file_type(drag));
-    if (ELEM(file_type, 0, FILE_TYPE_SOUND)) {
+    if (file_type == FILE_TYPE_SOUND) {
       return true;
     }
   }

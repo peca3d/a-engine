@@ -32,7 +32,7 @@
 #  include "BLI_threads.h"
 #  include "BLI_utildefines.h"
 
-#  include "BKE_appdir.h"
+#  include "BKE_appdir.hh"
 #  include "BKE_blender_version.h"
 #  include "BKE_blendfile.hh"
 #  include "BKE_context.hh"
@@ -48,7 +48,7 @@
 #  include "GPU_context.h"
 
 #  ifdef WITH_FFMPEG
-#    include "IMB_imbuf.h"
+#    include "IMB_imbuf.hh"
 #  endif
 
 #  ifdef WITH_PYTHON
@@ -659,11 +659,12 @@ static void print_help(bArgs *ba, bool all)
   BLI_args_print_arg_doc(ba, "--debug-depsgraph-no-threads");
   BLI_args_print_arg_doc(ba, "--debug-depsgraph-time");
   BLI_args_print_arg_doc(ba, "--debug-depsgraph-pretty");
-  BLI_args_print_arg_doc(ba, "--debug-depsgraph-uuid");
+  BLI_args_print_arg_doc(ba, "--debug-depsgraph-uid");
   BLI_args_print_arg_doc(ba, "--debug-ghost");
   BLI_args_print_arg_doc(ba, "--debug-wintab");
   BLI_args_print_arg_doc(ba, "--debug-gpu");
   BLI_args_print_arg_doc(ba, "--debug-gpu-force-workarounds");
+  BLI_args_print_arg_doc(ba, "--debug-gpu-compile-shaders");
   if (defs.with_renderdoc) {
     BLI_args_print_arg_doc(ba, "--debug-gpu-renderdoc");
   }
@@ -767,14 +768,18 @@ static void print_help(bArgs *ba, bool all)
   PRINT("  $BLENDER_SYSTEM_PYTHON     Directory for system Python libraries.\n");
 
   if (defs.with_ocio) {
-    PRINT("  $OCIO                     Path to override the OpenColorIO config file.\n");
+    PRINT("  $OCIO                      Path to override the OpenColorIO configuration file.\n");
   }
-  if (defs.win32) {
-    PRINT("  $TEMP                     Store temporary files here (MS-Windows).\n");
+  if (defs.win32 || all) {
+    PRINT("  $TEMP                      Store temporary files here (MS-Windows).\n");
   }
   if (!defs.win32 || all) {
-    PRINT("  $TMP or $TMPDIR           Store temporary files here (UNIX Systems).\n");
+    /* NOTE: while `TMP` checked, don't include here as it's non-standard & may be removed. */
+    PRINT("  $TMPDIR                    Store temporary files here (UNIX Systems).\n");
   }
+  PRINT(
+      "                             The path must reference an existing directory "
+      "or it will be ignored.\n");
 
 #  undef printf
 #  undef PRINT
@@ -843,7 +848,8 @@ static const char arg_handle_python_set_doc_enable[] =
     "Enable automatic Python script execution" PY_ENABLE_AUTO ".";
 static const char arg_handle_python_set_doc_disable[] =
     "\n\t"
-    "Disable automatic Python script execution (pydrivers & startup scripts)" PY_DISABLE_AUTO ".";
+    "Disable automatic Python script execution "
+    "(Python-drivers & startup scripts)" PY_DISABLE_AUTO ".";
 #  undef PY_ENABLE_AUTO
 #  undef PY_DISABLE_AUTO
 
@@ -1107,9 +1113,9 @@ static const char arg_handle_debug_mode_generic_set_doc_depsgraph_no_threads[] =
 static const char arg_handle_debug_mode_generic_set_doc_depsgraph_pretty[] =
     "\n\t"
     "Enable colors for dependency graph debug messages.";
-static const char arg_handle_debug_mode_generic_set_doc_depsgraph_uuid[] =
+static const char arg_handle_debug_mode_generic_set_doc_depsgraph_uid[] =
     "\n\t"
-    "Verify validness of session-wide identifiers assigned to ID datablocks.";
+    "Verify validness of session-wide identifiers assigned to ID data-blocks.";
 static const char arg_handle_debug_mode_generic_set_doc_gpu_force_workarounds[] =
     "\n\t"
     "Enable workarounds for typical GPU issues and disable all GPU extensions.";
@@ -1206,6 +1212,17 @@ static int arg_handle_debug_gpu_set(int /*argc*/, const char ** /*argv*/, void *
   const char *gpu_filter = "gpu.*";
   CLG_type_filter_include(gpu_filter, strlen(gpu_filter));
   G.debug |= G_DEBUG_GPU;
+  return 0;
+}
+
+static const char arg_handle_debug_gpu_compile_shaders_set_doc[] =
+    "\n"
+    "\tCompile all statically defined shaders to test platform compatibility.";
+static int arg_handle_debug_gpu_compile_shaders_set(int /*argc*/,
+                                                    const char ** /*argv*/,
+                                                    void * /*data*/)
+{
+  G.debug |= G_DEBUG_GPU_COMPILE_SHADERS;
   return 0;
 }
 
@@ -1445,7 +1462,7 @@ static int arg_handle_with_borders(int /*argc*/, const char ** /*argv*/, void * 
 
 static const char arg_handle_without_borders_doc[] =
     "\n\t"
-    "Force opening in fullscreen mode.";
+    "Force opening in full-screen mode.";
 static int arg_handle_without_borders(int /*argc*/, const char ** /*argv*/, void * /*data*/)
 {
   WM_init_state_fullscreen_set();
@@ -1550,7 +1567,7 @@ static const char arg_handle_audio_set_doc[] =
 static int arg_handle_audio_set(int argc, const char **argv, void * /*data*/)
 {
   if (argc < 1) {
-    fprintf(stderr, "-setaudio require one argument\n");
+    fprintf(stderr, "-setaudio requires one argument\n");
     exit(1);
   }
 
@@ -2418,6 +2435,11 @@ void main_args_setup(bContext *C, bArgs *ba, bool all)
                CB_EX(arg_handle_debug_mode_generic_set, jobs),
                (void *)G_DEBUG_JOBS);
   BLI_args_add(ba, nullptr, "--debug-gpu", CB(arg_handle_debug_gpu_set), nullptr);
+  BLI_args_add(ba,
+               nullptr,
+               "--debug-gpu-compile-shaders",
+               CB(arg_handle_debug_gpu_compile_shaders_set),
+               nullptr);
   if (defs.with_renderdoc) {
     BLI_args_add(
         ba, nullptr, "--debug-gpu-renderdoc", CB(arg_handle_debug_gpu_renderdoc_set), nullptr);
@@ -2461,9 +2483,9 @@ void main_args_setup(bContext *C, bArgs *ba, bool all)
                (void *)G_DEBUG_DEPSGRAPH_PRETTY);
   BLI_args_add(ba,
                nullptr,
-               "--debug-depsgraph-uuid",
-               CB_EX(arg_handle_debug_mode_generic_set, depsgraph_uuid),
-               (void *)G_DEBUG_DEPSGRAPH_UUID);
+               "--debug-depsgraph-uid",
+               CB_EX(arg_handle_debug_mode_generic_set, depsgraph_uid),
+               (void *)G_DEBUG_DEPSGRAPH_UID);
   BLI_args_add(ba,
                nullptr,
                "--debug-gpu-force-workarounds",

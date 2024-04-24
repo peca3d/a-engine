@@ -5,10 +5,10 @@
  * Modifications Copyright 2021 Tangent Animation and
  * NVIDIA Corporation. All rights reserved. */
 
-#include "usd_reader_mesh.h"
-#include "usd_hash_types.h"
-#include "usd_reader_material.h"
-#include "usd_skel_convert.h"
+#include "usd_reader_mesh.hh"
+#include "usd_hash_types.hh"
+#include "usd_reader_material.hh"
+#include "usd_skel_convert.hh"
 
 #include "BKE_attribute.hh"
 #include "BKE_customdata.hh"
@@ -44,7 +44,8 @@
 #include <pxr/usd/usdShade/materialBindingAPI.h>
 #include <pxr/usd/usdSkel/bindingAPI.h>
 
-#include <iostream>
+#include "CLG_log.h"
+static CLG_LogRef LOG = {"io.usd"};
 
 namespace usdtokens {
 /* Materials */
@@ -80,7 +81,7 @@ static pxr::UsdShadeMaterial compute_bound_material(const pxr::UsdPrim &prim)
 static void assign_materials(Main *bmain,
                              Object *ob,
                              const blender::Map<pxr::SdfPath, int> &mat_index_map,
-                             const USDImportParams &params,
+                             const blender::io::usd::USDImportParams &params,
                              pxr::UsdStageRefPtr stage,
                              blender::Map<std::string, Material *> &mat_name_to_mat,
                              blender::Map<std::string, std::string> &usd_path_to_mat_name)
@@ -106,8 +107,8 @@ static void assign_materials(Main *bmain,
       pxr::UsdShadeMaterial usd_mat(prim);
 
       if (!usd_mat) {
-        std::cout << "WARNING: Couldn't construct USD material from prim " << item.key
-                  << std::endl;
+        CLOG_WARN(
+            &LOG, "Couldn't construct USD material from prim %s", item.key.GetAsString().c_str());
         continue;
       }
 
@@ -115,15 +116,16 @@ static void assign_materials(Main *bmain,
       assigned_mat = mat_reader.add_material(usd_mat);
 
       if (!assigned_mat) {
-        std::cout << "WARNING: Couldn't create Blender material from USD material " << item.key
-                  << std::endl;
+        CLOG_WARN(&LOG,
+                  "Couldn't create Blender material from USD material %s",
+                  item.key.GetAsString().c_str());
         continue;
       }
 
       const std::string mat_name = pxr::TfMakeValidIdentifier(assigned_mat->id.name + 2);
       mat_name_to_mat.lookup_or_add_default(mat_name) = assigned_mat;
 
-      if (params.mtl_name_collision_mode == USD_MTL_NAME_COLLISION_MAKE_UNIQUE) {
+      if (params.mtl_name_collision_mode == blender::io::usd::USD_MTL_NAME_COLLISION_MAKE_UNIQUE) {
         /* Record the name of the Blender material we created for the USD material
          * with the given path. */
         usd_path_to_mat_name.lookup_or_add_default(item.key.GetAsString()) = mat_name;
@@ -135,7 +137,7 @@ static void assign_materials(Main *bmain,
     }
     else {
       /* This shouldn't happen. */
-      std::cout << "WARNING: Couldn't assign material " << item.key << std::endl;
+      CLOG_WARN(&LOG, "Couldn't assign material %s", item.key.GetAsString().c_str());
     }
   }
   if (ob->totcol > 0) {
@@ -213,7 +215,7 @@ static const std::optional<bke::AttrDomain> convert_usd_varying_to_blender(
     blender::Map<pxr::TfToken, bke::AttrDomain> map;
     map.add_new(pxr::UsdGeomTokens->faceVarying, bke::AttrDomain::Corner);
     map.add_new(pxr::UsdGeomTokens->vertex, bke::AttrDomain::Point);
-    map.add_new(pxr::UsdGeomTokens->varying, bke::AttrDomain::Corner);
+    map.add_new(pxr::UsdGeomTokens->varying, bke::AttrDomain::Point);
     map.add_new(pxr::UsdGeomTokens->face, bke::AttrDomain::Face);
     /* As there's no "constant" type in Blender, for now we're
      * translating into a point Attribute. */
@@ -400,7 +402,7 @@ void USDMeshReader::read_color_data_primvar(Mesh *mesh,
   pxr::TfToken interp = primvar.GetInterpolation();
 
   if ((interp == pxr::UsdGeomTokens->faceVarying && usd_colors.size() != mesh->corners_num) ||
-      (interp == pxr::UsdGeomTokens->varying && usd_colors.size() != mesh->corners_num) ||
+      (interp == pxr::UsdGeomTokens->varying && usd_colors.size() != mesh->verts_num) ||
       (interp == pxr::UsdGeomTokens->vertex && usd_colors.size() != mesh->verts_num) ||
       (interp == pxr::UsdGeomTokens->constant && usd_colors.size() != 1) ||
       (interp == pxr::UsdGeomTokens->uniform && usd_colors.size() != mesh->faces_num))
@@ -418,11 +420,7 @@ void USDMeshReader::read_color_data_primvar(Mesh *mesh,
 
   bke::AttrDomain color_domain = bke::AttrDomain::Point;
 
-  if (ELEM(interp,
-           pxr::UsdGeomTokens->varying,
-           pxr::UsdGeomTokens->faceVarying,
-           pxr::UsdGeomTokens->uniform))
-  {
+  if (ELEM(interp, pxr::UsdGeomTokens->faceVarying, pxr::UsdGeomTokens->uniform)) {
     color_domain = bke::AttrDomain::Corner;
   }
 
@@ -443,7 +441,7 @@ void USDMeshReader::read_color_data_primvar(Mesh *mesh,
         ColorGeometry4f(usd_colors[0][0], usd_colors[0][1], usd_colors[0][2], 1.0f));
   }
   /* Check for situations that allow for a straight-forward copy by index. */
-  else if (interp == pxr::UsdGeomTokens->vertex ||
+  else if (interp == pxr::UsdGeomTokens->vertex || interp == pxr::UsdGeomTokens->varying ||
            (interp == pxr::UsdGeomTokens->faceVarying && !is_left_handed_))
   {
     for (int i = 0; i < usd_colors.size(); i++) {
@@ -522,7 +520,7 @@ void USDMeshReader::read_uv_data_primvar(Mesh *mesh,
 
   if ((varying_type == pxr::UsdGeomTokens->faceVarying && usd_uvs.size() != mesh->corners_num) ||
       (varying_type == pxr::UsdGeomTokens->vertex && usd_uvs.size() != mesh->verts_num) ||
-      (varying_type == pxr::UsdGeomTokens->varying && usd_uvs.size() != mesh->corners_num))
+      (varying_type == pxr::UsdGeomTokens->varying && usd_uvs.size() != mesh->verts_num))
   {
     BKE_reportf(reports(),
                 RPT_WARNING,
@@ -543,7 +541,7 @@ void USDMeshReader::read_uv_data_primvar(Mesh *mesh,
     return;
   }
 
-  if (ELEM(varying_type, pxr::UsdGeomTokens->faceVarying, pxr::UsdGeomTokens->varying)) {
+  if (varying_type == pxr::UsdGeomTokens->faceVarying) {
     if (is_left_handed_) {
       /* Reverse the index order. */
       const OffsetIndices faces = mesh->faces();
@@ -721,13 +719,13 @@ void USDMeshReader::read_vertex_creases(Mesh *mesh, const double motionSampleTim
 
   /* It is fine to have fewer indices than vertices, but never the other way other. */
   if (corner_indices.size() > mesh->verts_num) {
-    std::cerr << "WARNING: too many vertex crease for mesh " << prim_path_ << std::endl;
+    CLOG_WARN(&LOG, "Too many vertex creases for mesh %s", prim_path_.c_str());
     return;
   }
 
   if (corner_indices.size() != corner_sharpnesses.size()) {
-    std::cerr << "WARNING: vertex crease indices and sharpnesses count mismatch for mesh "
-              << prim_path_ << std::endl;
+    CLOG_WARN(
+        &LOG, "Vertex crease and sharpnesses count mismatch for mesh %s", prim_path_.c_str());
     return;
   }
 
@@ -752,8 +750,7 @@ void USDMeshReader::process_normals_vertex_varying(Mesh *mesh)
   }
 
   if (normals_.size() != mesh->verts_num) {
-    std::cerr << "WARNING: vertex varying normals count mismatch for mesh " << prim_path_
-              << std::endl;
+    CLOG_WARN(&LOG, "Vertex varying normals count mismatch for mesh %s", prim_path_.c_str());
     return;
   }
 
@@ -770,7 +767,7 @@ void USDMeshReader::process_normals_face_varying(Mesh *mesh)
 
   /* Check for normals count mismatches to prevent crashes. */
   if (normals_.size() != mesh->corners_num) {
-    std::cerr << "WARNING: loop normal count mismatch for mesh " << mesh->id.name << std::endl;
+    CLOG_WARN(&LOG, "Loop normal count mismatch for mesh %s", mesh->id.name);
     return;
   }
 
@@ -811,7 +808,7 @@ void USDMeshReader::process_normals_uniform(Mesh *mesh)
 
   /* Check for normals count mismatches to prevent crashes. */
   if (normals_.size() != mesh->faces_num) {
-    std::cerr << "WARNING: uniform normal count mismatch for mesh " << mesh->id.name << std::endl;
+    CLOG_WARN(&LOG, "Uniform normal count mismatch for mesh %s", mesh->id.name);
     return;
   }
 

@@ -36,12 +36,12 @@
 
 #include "BLT_translation.h"
 
-#include "BLF_api.h"
+#include "BLF_api.hh"
 
-#include "IMB_imbuf.h"
-#include "IMB_imbuf_types.h"
-#include "IMB_metadata.h"
-#include "IMB_thumbs.h"
+#include "IMB_imbuf.hh"
+#include "IMB_imbuf_types.hh"
+#include "IMB_metadata.hh"
+#include "IMB_thumbs.hh"
 
 #include "DNA_userdef_types.h"
 #include "DNA_windowmanager_types.h"
@@ -96,8 +96,6 @@ void ED_file_path_button(bScreen *screen,
                   0,
                   0.0f,
                   float(FILE_MAX),
-                  0.0f,
-                  0.0f,
                   TIP_("File path"));
 
   BLI_assert(!UI_but_flag_is_set(but, UI_BUT_UNDO));
@@ -283,7 +281,7 @@ static void file_draw_tooltip_custom_func(bContext * /*C*/, uiTooltipData *tip, 
                                           day_string,
                                           (is_today || is_yesterday) ? "" : date_st,
                                           (is_today || is_yesterday) ? time_st : ""),
-                              nullptr,
+                              {},
                               UI_TIP_STYLE_NORMAL,
                               UI_TIP_LC_NORMAL);
 
@@ -291,7 +289,7 @@ static void file_draw_tooltip_custom_func(bContext * /*C*/, uiTooltipData *tip, 
       char size[16];
       BLI_filelist_entry_size_to_string(nullptr, file->size, false, size);
       if (file->size < 10000) {
-        char size_full[16];
+        char size_full[BLI_STR_FORMAT_UINT64_GROUPED_SIZE];
         BLI_str_format_uint64_grouped(size_full, file->size);
         UI_tooltip_text_field_add(
             tip,
@@ -311,7 +309,7 @@ static void file_draw_tooltip_custom_func(bContext * /*C*/, uiTooltipData *tip, 
   }
 
   if (thumb && params->display != FILE_IMGDISPLAY) {
-    float scale = (96.0f * UI_SCALE_FAC) / float(MAX2(thumb->x, thumb->y));
+    float scale = (96.0f * UI_SCALE_FAC) / float(std::max(thumb->x, thumb->y));
     short size[2] = {short(float(thumb->x) * scale), short(float(thumb->y) * scale)};
     UI_tooltip_text_field_add(tip, {}, {}, UI_TIP_STYLE_SPACER, UI_TIP_LC_NORMAL);
     UI_tooltip_text_field_add(tip, {}, {}, UI_TIP_STYLE_SPACER, UI_TIP_LC_NORMAL);
@@ -323,7 +321,7 @@ static void file_draw_tooltip_custom_func(bContext * /*C*/, uiTooltipData *tip, 
   }
 }
 
-static char *file_draw_asset_tooltip_func(bContext * /*C*/, void *argN, const char * /*tip*/)
+static std::string file_draw_asset_tooltip_func(bContext * /*C*/, void *argN, const char * /*tip*/)
 {
   const auto *asset = static_cast<blender::asset_system::AssetRepresentation *>(argN);
   std::string complete_string = asset->get_name();
@@ -332,7 +330,7 @@ static char *file_draw_asset_tooltip_func(bContext * /*C*/, void *argN, const ch
     complete_string += '\n';
     complete_string += meta_data.description;
   }
-  return BLI_strdupn(complete_string.c_str(), complete_string.size());
+  return complete_string;
 }
 
 static void draw_tile_background(const rcti *draw_rect, int colorid, int shade)
@@ -823,26 +821,28 @@ static void renamebutton_cb(bContext *C, void * /*arg1*/, char *oldname)
   BLI_path_join(newname, sizeof(newname), params->dir, filename);
 
   if (!STREQ(orgname, newname)) {
-    if (!BLI_exists(newname)) {
-      errno = 0;
-      if ((BLI_rename(orgname, newname) != 0) || !BLI_exists(newname)) {
-        WM_reportf(RPT_ERROR, "Could not rename: %s", errno ? strerror(errno) : "unknown error");
-        WM_report_banner_show(wm, win);
-      }
-      else {
-        /* If rename is successful, scroll to newly renamed entry. */
-        STRNCPY(params->renamefile, filename);
-        file_params_invoke_rename_postscroll(wm, win, sfile);
-      }
-
-      /* to make sure we show what is on disk */
-      ED_fileselect_clear(wm, sfile);
-    }
-    else {
+    errno = 0;
+    if ((BLI_rename(orgname, newname) != 0) || !BLI_exists(newname)) {
+      WM_reportf(RPT_ERROR, "Could not rename: %s", errno ? strerror(errno) : "unknown error");
+      WM_report_banner_show(wm, win);
       /* Renaming failed, reset the name for further renaming handling. */
       STRNCPY(params->renamefile, oldname);
     }
+    else {
+      /* If rename is successful, set renamefile to newly renamed entry.
+       * This is used later to select and scroll to the file.
+       */
+      STRNCPY(params->renamefile, filename);
+    }
 
+    /* Ensure we select and scroll to the renamed file.
+     * This is done even if the rename fails as we want to make sure that the file we tried to
+     * rename is still selected and in view. (it can move if something added files/folders to the
+     * directory while we were renaming.
+     */
+    file_params_invoke_rename_postscroll(wm, win, sfile);
+    /* to make sure we show what is on disk */
+    ED_fileselect_clear(wm, sfile);
     ED_region_tag_redraw(region);
   }
 }
@@ -1281,7 +1281,8 @@ void file_draw_list(const bContext *C, ARegion *region)
       if (do_drag) {
         const uiStyle *style = UI_style_get();
         const int str_width = UI_fontstyle_string_width(&style->widget, file->name);
-        const int drag_width = MIN2(str_width + icon_ofs, column_width - ATTRIBUTE_COLUMN_PADDING);
+        const int drag_width = std::min(str_width + icon_ofs,
+                                        int(column_width - ATTRIBUTE_COLUMN_PADDING));
         if (drag_width > 0) {
           uiBut *drag_but = uiDefBut(block,
                                      UI_BTYPE_LABEL,
@@ -1457,18 +1458,19 @@ static void file_draw_invalid_asset_library_hint(const bContext *C,
         sx + UI_UNIT_X, sy, suggestion, width - UI_UNIT_X, line_height, text_col, nullptr, &sy);
 
     uiBlock *block = UI_block_begin(C, region, __func__, UI_EMBOSS);
-    uiBut *but = uiDefIconTextButO(block,
-                                   UI_BTYPE_BUT,
-                                   "SCREEN_OT_userpref_show",
-                                   WM_OP_INVOKE_DEFAULT,
-                                   ICON_PREFERENCES,
-                                   nullptr,
-                                   sx + UI_UNIT_X,
-                                   sy - line_height - UI_UNIT_Y * 1.2f,
-                                   UI_UNIT_X * 8,
-                                   UI_UNIT_Y,
-                                   nullptr);
-    PointerRNA *but_opptr = UI_but_operator_ptr_get(but);
+    wmOperatorType *ot = WM_operatortype_find("SCREEN_OT_userpref_show", false);
+    uiBut *but = uiDefIconTextButO_ptr(block,
+                                       UI_BTYPE_BUT,
+                                       ot,
+                                       WM_OP_INVOKE_DEFAULT,
+                                       ICON_PREFERENCES,
+                                       WM_operatortype_name(ot, nullptr),
+                                       sx + UI_UNIT_X,
+                                       sy - line_height - UI_UNIT_Y * 1.2f,
+                                       UI_UNIT_X * 8,
+                                       UI_UNIT_Y,
+                                       nullptr);
+    PointerRNA *but_opptr = UI_but_operator_ptr_ensure(but);
     RNA_enum_set(but_opptr, "section", USER_SECTION_FILE_PATHS);
 
     UI_block_end(C, block);

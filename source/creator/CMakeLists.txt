@@ -598,6 +598,12 @@ if(WIN32)
         ${LIBDIR}/OpenImageDenoise/bin/OpenImageDenoise_device_hip.dll
     )
   endif()
+  if(EXISTS ${LIBDIR}/OpenImageDenoise/bin/OpenImageDenoise_device_cuda.dll) # 4.1
+    windows_install_shared_manifest(
+      FILES
+        ${LIBDIR}/OpenImageDenoise/bin/OpenImageDenoise_device_cuda.dll
+    )
+  endif()
 endif()
 
 # Show helpful tip.
@@ -704,7 +710,8 @@ if(UNIX AND NOT APPLE)
       # Pass.
     elseif(EXISTS ${LIBDIR}/mesa)
       install(
-        DIRECTORY ${LIBDIR}/mesa/lib
+        # Trailing slash is needed to install contents instead of directory itself.
+        DIRECTORY ${LIBDIR}/mesa/lib/
         DESTINATION "./lib/mesa"
       )
 
@@ -863,8 +870,10 @@ file(REMOVE ${CMAKE_BINARY_DIR}/bin/lib/libglapi.so.0.0.0)\n
         # Install to the same directory as the source, so debian-like
         # distros are happy with their policy.
         set(_suffix "site-packages")
-        if(${PYTHON_USD_PATH} MATCHES "dist-packages")
-          set(_suffix "dist-packages")
+        if(0) # TODO: `PYTHON_USD_PATH` isn't defined anywhere.
+          if(${PYTHON_USD_PATH} MATCHES "dist-packages")
+            set(_suffix "dist-packages")
+          endif()
         endif()
         install(
           DIRECTORY ${USD_LIBRARY_DIR}/python/
@@ -1664,10 +1673,6 @@ install(
 # Bundle assets
 
 set(ASSET_BUNDLE_DIR ${CMAKE_SOURCE_DIR}/release/datafiles/assets/publish/)
-
-if(NOT EXISTS "${ASSET_BUNDLE_DIR}")
-  set(ASSET_BUNDLE_DIR ${CMAKE_SOURCE_DIR}/../lib/assets/publish/)
-endif()
 
 if(EXISTS "${ASSET_BUNDLE_DIR}")
   install(

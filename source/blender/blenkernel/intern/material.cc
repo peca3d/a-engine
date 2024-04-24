@@ -53,7 +53,7 @@
 #include "BKE_gpencil_legacy.h"
 #include "BKE_grease_pencil.hh"
 #include "BKE_icons.h"
-#include "BKE_idtype.h"
+#include "BKE_idtype.hh"
 #include "BKE_image.h"
 #include "BKE_lib_id.hh"
 #include "BKE_lib_query.hh"
@@ -72,7 +72,7 @@
 #include "DEG_depsgraph_build.hh"
 #include "DEG_depsgraph_query.hh"
 
-#include "GPU_material.h"
+#include "GPU_material.hh"
 
 #include "NOD_shader.h"
 
@@ -823,14 +823,6 @@ void BKE_id_material_eval_ensure_default_slot(ID *id)
   }
 }
 
-bool BKE_material_use_custom_holdout(Material* ma)
-{
-  if (ma == NULL || ma->blend_method == MA_BM_SOLID) {
-    return false;
-  }
-  return true;
-}
-
 int BKE_object_material_index_get(Object *ob, Material *ma)
 {
   short *totcol = BKE_object_material_len_p(ob);
@@ -856,6 +848,14 @@ int BKE_object_material_ensure(Main *bmain, Object *ob, Material *material)
     return ob->totcol - 1;
   }
   return index;
+}
+
+bool BKE_material_use_custom_holdout(Material* ma)
+{
+  if (ma == NULL || ma->blend_method == MA_BM_SOLID) {
+    return false;
+  }
+  return true;
 }
 
 Material *BKE_gpencil_material(Object *ob, short act)
@@ -1257,7 +1257,7 @@ void BKE_object_material_array_assign(
 
   /* now we have the right number of slots */
   for (int i = 0; i < totcol; i++) {
-    if (to_object_only && ob->matbits[i] == 0) {
+    if (to_object_only && ob->matbits && ob->matbits[i] == 0) {
       /* If we only assign to object, and that slot uses obdata material, do nothing. */
       continue;
     }

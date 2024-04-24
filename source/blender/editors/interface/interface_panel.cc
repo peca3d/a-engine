@@ -30,7 +30,7 @@
 
 #include "RNA_access.hh"
 
-#include "BLF_api.h"
+#include "BLF_api.hh"
 
 #include "WM_api.hh"
 #include "WM_types.hh"
@@ -1095,10 +1095,10 @@ static void panel_draw_aligned_widgets(const uiStyle *style,
     const float size_y = BLI_rcti_size_y(&widget_rect);
     GPU_blend(GPU_BLEND_ALPHA);
     UI_icon_draw_ex(widget_rect.xmin + size_y * 0.2f,
-                    widget_rect.ymin + size_y * 0.2f,
+                    widget_rect.ymin + size_y * (UI_panel_is_closed(panel) ? 0.17f : 0.14f),
                     UI_panel_is_closed(panel) ? ICON_RIGHTARROW : ICON_DOWNARROW_HLT,
                     aspect * UI_INV_SCALE_FAC,
-                    0.7f,
+                    0.8f,
                     0.0f,
                     title_color,
                     false,
@@ -1167,8 +1167,9 @@ static void panel_draw_aligned_backdrop(const ARegion *region,
                                         const rcti *rect,
                                         const rcti *header_rect)
 {
-  const bool is_subpanel = panel->type->parent != nullptr;
   const bool is_open = !UI_panel_is_closed(panel);
+  const bool is_subpanel = panel->type->parent != nullptr;
+  const bool has_header = (panel->type->flag & PANEL_TYPE_NO_HEADER) == 0;
 
   if (is_subpanel && !is_open) {
     return;
@@ -1182,10 +1183,15 @@ static void panel_draw_aligned_backdrop(const ARegion *region,
   GPU_blend(GPU_BLEND_ALPHA);
 
   /* Panel backdrop. */
-  if (is_open || panel->type->flag & PANEL_TYPE_NO_HEADER) {
+  if (is_open || !has_header) {
     float panel_backcolor[4];
     UI_draw_roundbox_corner_set(is_open ? UI_CNR_BOTTOM_RIGHT | UI_CNR_BOTTOM_LEFT : UI_CNR_ALL);
-    UI_GetThemeColor4fv((is_subpanel ? TH_PANEL_SUB_BACK : TH_PANEL_BACK), panel_backcolor);
+    if (!has_header) {
+      UI_GetThemeColor4fv(TH_BACK, panel_backcolor);
+    }
+    else {
+      UI_GetThemeColor4fv((is_subpanel ? TH_PANEL_SUB_BACK : TH_PANEL_BACK), panel_backcolor);
+    }
 
     rctf box_rect;
     box_rect.xmin = rect->xmin;
@@ -1222,7 +1228,7 @@ static void panel_draw_aligned_backdrop(const ARegion *region,
   }
 
   /* Panel header backdrops for non sub-panels. */
-  if (!is_subpanel) {
+  if (!is_subpanel && has_header) {
     float panel_headercolor[4];
     UI_GetThemeColor4fv(UI_panel_matches_search_filter(panel) ? TH_MATCH : TH_PANEL_HEADER,
                         panel_headercolor);
@@ -1259,7 +1265,7 @@ void ui_draw_aligned_panel(const ARegion *region,
       rect->ymax + int(floor(PNL_HEADER / block->aspect + 0.001f)),
   };
 
-  if (show_background) {
+  if (show_background || (panel->type->flag & PANEL_TYPE_NO_HEADER)) {
     panel_draw_aligned_backdrop(region, panel, rect, &header_rect);
   }
 
@@ -2455,7 +2461,7 @@ int ui_handler_panel_region(bContext *C,
       continue;
     }
     /* We can't expand or collapse panels without headers, they would disappear. Layout panels can
-     * be expanded and collpased though. */
+     * be expanded and collapsed though. */
     const bool has_panel_header = !(panel->type->flag & PANEL_TYPE_NO_HEADER);
 
     int mx = event->xy[0];

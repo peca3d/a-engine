@@ -44,8 +44,8 @@
 /* vertex box select */
 #include "BKE_global.h"
 #include "BKE_main.hh"
-#include "IMB_imbuf.h"
-#include "IMB_imbuf_types.h"
+#include "IMB_imbuf.hh"
+#include "IMB_imbuf_types.hh"
 
 #include "BKE_action.h"
 #include "BKE_armature.hh"
@@ -55,8 +55,8 @@
 #include "BKE_curve.hh"
 #include "BKE_editmesh.hh"
 #include "BKE_grease_pencil.hh"
-#include "BKE_layer.h"
-#include "BKE_mball.h"
+#include "BKE_layer.hh"
+#include "BKE_mball.hh"
 #include "BKE_mesh.hh"
 #include "BKE_object.hh"
 #include "BKE_object_types.hh"
@@ -105,6 +105,8 @@
 #include "view3d_intern.h" /* own include */
 
 // #include "BLI_time_utildefines.h"
+
+using blender::Vector;
 
 /* -------------------------------------------------------------------- */
 /** \name Public Utilities
@@ -203,19 +205,17 @@ struct EditSelectBuf_Cache {
 static void editselect_buf_cache_init(ViewContext *vc, short select_mode)
 {
   if (vc->obedit) {
-    uint bases_len = 0;
-    Base **bases = BKE_view_layer_array_from_bases_in_edit_mode(
-        vc->scene, vc->view_layer, vc->v3d, &bases_len);
+    Vector<Base *> bases = BKE_view_layer_array_from_bases_in_edit_mode(
+        vc->scene, vc->view_layer, vc->v3d);
 
-    DRW_select_buffer_context_create(vc->depsgraph, bases, bases_len, select_mode);
-    MEM_freeN(bases);
+    DRW_select_buffer_context_create(vc->depsgraph, bases, select_mode);
   }
   else {
     /* Use for paint modes, currently only a single object at a time. */
     if (vc->obact) {
       BKE_view_layer_synced_ensure(vc->scene, vc->view_layer);
       Base *base = BKE_view_layer_base_find(vc->view_layer, vc->obact);
-      DRW_select_buffer_context_create(vc->depsgraph, &base, 1, select_mode);
+      DRW_select_buffer_context_create(vc->depsgraph, {base}, select_mode);
     }
   }
 }
@@ -468,8 +468,13 @@ static bool view3d_selectable_data(bContext *C)
       }
     }
     else {
-      if ((ob->mode & (OB_MODE_VERTEX_PAINT | OB_MODE_WEIGHT_PAINT | OB_MODE_TEXTURE_PAINT)) &&
+      if ((ob->mode & (OB_MODE_VERTEX_PAINT | OB_MODE_TEXTURE_PAINT)) &&
           !BKE_paint_select_elem_test(ob))
+      {
+        return false;
+      }
+      if ((ob->mode & OB_MODE_WEIGHT_PAINT) &&
+          !(BKE_paint_select_elem_test(ob) || BKE_object_pose_armature_get_with_wpaint_check(ob)))
       {
         return false;
       }
@@ -543,31 +548,24 @@ static void do_lasso_select_pose__do_tag(void *user_data,
     data->is_changed = true;
   }
 }
-static void do_lasso_tag_pose(ViewContext *vc,
-                              Object *ob,
-                              const int mcoords[][2],
-                              const int mcoords_len)
+static void do_lasso_tag_pose(ViewContext *vc, const int mcoords[][2], const int mcoords_len)
 {
-  ViewContext vc_tmp;
   LassoSelectUserData data;
   rcti rect;
 
-  if ((ob->type != OB_ARMATURE) || (ob->pose == nullptr)) {
+  if ((vc->obact->type != OB_ARMATURE) || (vc->obact->pose == nullptr)) {
     return;
   }
-
-  vc_tmp = *vc;
-  vc_tmp.obact = ob;
 
   BLI_lasso_boundbox(&rect, mcoords, mcoords_len);
 
   view3d_userdata_lassoselect_init(
       &data, vc, &rect, mcoords, mcoords_len, static_cast<eSelectOp>(0));
 
-  ED_view3d_init_mats_rv3d(vc_tmp.obact, vc->rv3d);
+  ED_view3d_init_mats_rv3d(vc->obact, vc->rv3d);
 
   /* Treat bones as clipped segments (no joints). */
-  pose_foreachScreenBone(&vc_tmp,
+  pose_foreachScreenBone(vc,
                          do_lasso_select_pose__do_tag,
                          &data,
                          V3D_PROJ_TEST_CLIP_DEFAULT | V3D_PROJ_TEST_CLIP_CONTENT_DEFAULT);
@@ -617,22 +615,37 @@ static bool do_lasso_select_objects(ViewContext *vc,
  */
 static blender::Vector<Base *> do_pose_tag_select_op_prepare(ViewContext *vc)
 {
-  blender::Vector<Base *> bases;
-
-  FOREACH_BASE_IN_MODE_BEGIN (
-      vc->scene, vc->view_layer, vc->v3d, OB_ARMATURE, OB_MODE_POSE, base_iter)
-  {
-    Object *ob_iter = base_iter->object;
-    bArmature *arm = static_cast<bArmature *>(ob_iter->data);
-    LISTBASE_FOREACH (bPoseChannel *, pchan, &ob_iter->pose->chanbase) {
+  auto bases_tag_and_append_fn = [](blender::Vector<Base *> &bases, Base *base) {
+    Object *ob = base->object;
+    bArmature *arm = static_cast<bArmature *>(ob->data);
+    LISTBASE_FOREACH (bPoseChannel *, pchan, &ob->pose->chanbase) {
       Bone *bone = pchan->bone;
       bone->flag &= ~BONE_DONE;
     }
     arm->id.tag |= LIB_TAG_DOIT;
-    ob_iter->id.tag &= ~LIB_TAG_DOIT;
-    bases.append(base_iter);
+    ob->id.tag &= ~LIB_TAG_DOIT;
+    bases.append(base);
+  };
+
+  blender::Vector<Base *> bases;
+
+  /* Special case, pose + weight paint mode. */
+  if (vc->obact && (vc->obact->mode & OB_MODE_WEIGHT_PAINT)) {
+    Object *ob_pose = BKE_object_pose_armature_get_with_wpaint_check(vc->obact);
+    BLI_assert(ob_pose != nullptr); /* Caller is expected to check. */
+    Base *base = BKE_view_layer_base_find(vc->view_layer, ob_pose);
+    if (base) {
+      bases_tag_and_append_fn(bases, base);
+    }
   }
-  FOREACH_BASE_IN_MODE_END;
+  else {
+    FOREACH_BASE_IN_MODE_BEGIN (
+        vc->scene, vc->view_layer, vc->v3d, OB_ARMATURE, OB_MODE_POSE, base_iter)
+    {
+      bases_tag_and_append_fn(bases, base_iter);
+    }
+    FOREACH_BASE_IN_MODE_END;
+  }
   return bases;
 }
 
@@ -697,10 +710,13 @@ static bool do_lasso_select_pose(ViewContext *vc,
 {
   blender::Vector<Base *> bases = do_pose_tag_select_op_prepare(vc);
 
+  ViewContext vc_temp = *vc;
+
   for (const int i : bases.index_range()) {
     Base *base_iter = bases[i];
     Object *ob_iter = base_iter->object;
-    do_lasso_tag_pose(vc, ob_iter, mcoords, mcoords_len);
+    ED_view3d_viewcontext_init_object(&vc_temp, ob_iter);
+    do_lasso_tag_pose(&vc_temp, mcoords, mcoords_len);
   }
 
   const bool changed_multi = do_pose_tag_select_op_exec(bases, sel_op);
@@ -1378,19 +1394,22 @@ static bool view3d_lasso_select(bContext *C,
     else if (BKE_paint_select_vert_test(ob)) {
       changed_multi |= do_lasso_select_paintvert(vc, wm_userdata, mcoords, mcoords_len, sel_op);
     }
-    else if (ob &&
-             (ob->mode & (OB_MODE_VERTEX_PAINT | OB_MODE_WEIGHT_PAINT | OB_MODE_TEXTURE_PAINT)))
-    {
-      /* pass */
-    }
     else if (ob && (ob->mode & OB_MODE_PARTICLE_EDIT)) {
       changed_multi |= PE_lasso_select(C, mcoords, mcoords_len, sel_op) != OPERATOR_CANCELLED;
     }
-    else if (ob && (ob->mode & OB_MODE_POSE)) {
+    else if (ob &&
+             ((ob->mode & OB_MODE_POSE) | ((ob->mode & OB_MODE_WEIGHT_PAINT) &&
+                                           BKE_object_pose_armature_get_with_wpaint_check(ob))))
+    {
       changed_multi |= do_lasso_select_pose(vc, mcoords, mcoords_len, sel_op);
       if (changed_multi) {
         ED_outliner_select_sync_from_pose_bone_tag(C);
       }
+    }
+    else if (ob &&
+             (ob->mode & (OB_MODE_VERTEX_PAINT | OB_MODE_WEIGHT_PAINT | OB_MODE_TEXTURE_PAINT)))
+    {
+      /* pass */
     }
     else {
       changed_multi |= do_lasso_select_objects(vc, mcoords, mcoords_len, sel_op);
@@ -3091,10 +3110,8 @@ static bool ed_curves_select_pick(bContext &C, const int mval[2], const SelectPi
   /* Setup view context for argument to callbacks. */
   ViewContext vc = ED_view3d_viewcontext_init(&C, depsgraph);
 
-  uint bases_len;
-  Base **bases_ptr = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(
-      vc.scene, vc.view_layer, vc.v3d, &bases_len);
-  Span<Base *> bases(bases_ptr, bases_len);
+  const Vector<Base *> bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(
+      vc.scene, vc.view_layer, vc.v3d);
 
   Curves &active_curves_id = *static_cast<Curves *>(vc.obedit->data);
   const bke::AttrDomain selection_domain = bke::AttrDomain(active_curves_id.selection_domain);
@@ -3105,7 +3122,7 @@ static bool ed_curves_select_pick(bContext &C, const int mval[2], const SelectPi
       ClosestCurveDataBlock(),
       [&](const IndexRange range, const ClosestCurveDataBlock &init) {
         ClosestCurveDataBlock new_closest = init;
-        for (Base *base : bases.slice(range)) {
+        for (Base *base : bases.as_span().slice(range)) {
           Object &curves_ob = *base->object;
           Curves &curves_id = *static_cast<Curves *>(curves_ob.data);
           bke::crazyspace::GeometryDeformation deformation =
@@ -3135,7 +3152,7 @@ static bool ed_curves_select_pick(bContext &C, const int mval[2], const SelectPi
   std::atomic<bool> deselected = false;
   if (params.deselect_all || params.sel_op == SEL_OP_SET) {
     threading::parallel_for(bases.index_range(), 1L, [&](const IndexRange range) {
-      for (Base *base : bases.slice(range)) {
+      for (Base *base : bases.as_span().slice(range)) {
         Curves &curves_id = *static_cast<Curves *>(base->object->data);
         bke::CurvesGeometry &curves = curves_id.geometry.wrap();
         if (!ed::curves::has_anything_selected(curves)) {
@@ -3156,7 +3173,6 @@ static bool ed_curves_select_pick(bContext &C, const int mval[2], const SelectPi
   }
 
   if (!closest.curves_id) {
-    MEM_freeN(bases_ptr);
     return deselected;
   }
 
@@ -3170,8 +3186,6 @@ static bool ed_curves_select_pick(bContext &C, const int mval[2], const SelectPi
    * generic attribute for now. */
   DEG_id_tag_update(&closest.curves_id->id, ID_RECALC_GEOMETRY);
   WM_event_add_notifier(&C, NC_GEOM | ND_DATA, closest.curves_id);
-
-  MEM_freeN(bases_ptr);
 
   return true;
 }
@@ -3995,16 +4009,15 @@ static bool do_armature_box_select(ViewContext *vc, const rcti *rect, const eSel
 
   hits = view3d_opengl_select(vc, &buffer, rect, VIEW3D_SELECT_ALL, VIEW3D_SELECT_FILTER_NOP);
 
-  uint bases_len = 0;
-  Base **bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(
-      vc->scene, vc->view_layer, vc->v3d, &bases_len);
+  Vector<Base *> bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(
+      vc->scene, vc->view_layer, vc->v3d);
 
   if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
-    changed |= ED_armature_edit_deselect_all_visible_multi_ex(bases, bases_len);
+    changed |= ED_armature_edit_deselect_all_visible_multi_ex(bases);
   }
 
-  for (uint base_index = 0; base_index < bases_len; base_index++) {
-    Object *obedit = bases[base_index]->object;
+  for (Base *base : bases) {
+    Object *obedit = base->object;
     obedit->id.tag &= ~LIB_TAG_DOIT;
 
     bArmature *arm = static_cast<bArmature *>(obedit->data);
@@ -4020,23 +4033,20 @@ static bool do_armature_box_select(ViewContext *vc, const rcti *rect, const eSel
       }
 
       EditBone *ebone;
-      Base *base_edit = ED_armature_base_and_ebone_from_select_buffer(
-          bases, bases_len, select_id, &ebone);
+      Base *base_edit = ED_armature_base_and_ebone_from_select_buffer(bases, select_id, &ebone);
       ebone->temp.i |= select_id & BONESEL_ANY;
       base_edit->object->id.tag |= LIB_TAG_DOIT;
     }
   }
 
-  for (uint base_index = 0; base_index < bases_len; base_index++) {
-    Object *obedit = bases[base_index]->object;
+  for (Base *base : bases) {
+    Object *obedit = base->object;
     if (obedit->id.tag & LIB_TAG_DOIT) {
       obedit->id.tag &= ~LIB_TAG_DOIT;
       changed |= ED_armature_edit_select_op_from_tagged(static_cast<bArmature *>(obedit->data),
                                                         sel_op);
     }
   }
-
-  MEM_freeN(bases);
 
   return changed;
 }
@@ -4108,8 +4118,7 @@ static bool do_object_box_select(bContext *C,
        buf_iter++)
   {
     bPoseChannel *pchan_dummy;
-    Base *base = ED_armature_base_and_pchan_from_select_buffer(
-        bases.data(), bases.size(), buf_iter->id, &pchan_dummy);
+    Base *base = ED_armature_base_and_pchan_from_select_buffer(bases, buf_iter->id, &pchan_dummy);
     if (base != nullptr) {
       base->object->id.tag |= LIB_TAG_DOIT;
     }
@@ -4167,8 +4176,7 @@ static bool do_pose_box_select(bContext *C,
          buf_iter++)
     {
       Bone *bone;
-      Base *base = ED_armature_base_and_bone_from_select_buffer(
-          bases.data(), bases.size(), buf_iter->id, &bone);
+      Base *base = ED_armature_base_and_bone_from_select_buffer(bases, buf_iter->id, &bone);
 
       if (base == nullptr) {
         continue;
@@ -4357,7 +4365,10 @@ static int view3d_box_select_exec(bContext *C, wmOperator *op)
     else if (vc.obact && vc.obact->mode & OB_MODE_PARTICLE_EDIT) {
       changed_multi = PE_box_select(C, &rect, sel_op);
     }
-    else if (vc.obact && vc.obact->mode & OB_MODE_POSE) {
+    else if (vc.obact && ((vc.obact->mode & OB_MODE_POSE) ||
+                          ((vc.obact->mode & OB_MODE_WEIGHT_PAINT) &&
+                           BKE_object_pose_armature_get_with_wpaint_check(vc.obact))))
+    {
       changed_multi = do_pose_box_select(C, &vc, &rect, sel_op);
       if (changed_multi) {
         ED_outliner_select_sync_from_pose_bone_tag(C);
@@ -5320,6 +5331,14 @@ static int view3d_circle_select_exec(bContext *C, wmOperator *op)
   }
   else if (obact && obact->mode & OB_MODE_SCULPT) {
     return OPERATOR_CANCELLED;
+  }
+  else if (Object *obact_pose = (obact && (obact->mode & OB_MODE_WEIGHT_PAINT)) ?
+                                    BKE_object_pose_armature_get_with_wpaint_check(obact) :
+                                    nullptr)
+  {
+    ED_view3d_viewcontext_init_object(&vc, obact_pose);
+    pose_circle_select(&vc, sel_op, mval, float(radius));
+    ED_outliner_select_sync_from_pose_bone_tag(C);
   }
   else {
     if (object_circle_select(&vc, sel_op, mval, float(radius))) {

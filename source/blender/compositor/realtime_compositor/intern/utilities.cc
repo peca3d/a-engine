@@ -11,8 +11,8 @@
 #include "BLI_task.hh"
 #include "BLI_utildefines.h"
 
-#include "IMB_colormanagement.h"
-#include "IMB_imbuf.h"
+#include "IMB_colormanagement.hh"
+#include "IMB_imbuf.hh"
 
 #include "DNA_node_types.h"
 
@@ -161,6 +161,21 @@ bool is_node_preview_needed(const DNode &node)
   }
 
   return true;
+}
+
+DOutputSocket find_preview_output_socket(const DNode &node)
+{
+  if (!is_node_preview_needed(node)) {
+    return DOutputSocket();
+  }
+
+  for (const bNodeSocket *output : node->output_sockets()) {
+    if (output->is_logically_linked()) {
+      return DOutputSocket(node.context(), output);
+    }
+  }
+
+  return DOutputSocket();
 }
 
 /* Given the size of a result, compute a lower resolution size for a preview. The greater dimension

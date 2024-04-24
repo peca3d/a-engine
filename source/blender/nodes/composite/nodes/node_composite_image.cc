@@ -745,6 +745,11 @@ class RenderLayerOperation : public NodeOperation {
       return;
     }
 
+    if (!context().is_valid_compositing_region()) {
+      result.allocate_invalid();
+      return;
+    }
+
     GPUShader *shader = context().get_shader(shader_name);
     GPU_shader_bind(shader);
 
@@ -756,6 +761,11 @@ class RenderLayerOperation : public NodeOperation {
 
     const int input_unit = GPU_shader_get_sampler_binding(shader, "input_tx");
     GPU_texture_bind(pass_texture, input_unit);
+
+    /* Depth passes always need to be stored in full precision. */
+    if (GPU_texture_has_depth_format(pass_texture)) {
+      result.set_precision(ResultPrecision::Full);
+    }
 
     const int2 compositing_region_size = context().get_compositing_region_size();
     result.allocate_texture(Domain(compositing_region_size));

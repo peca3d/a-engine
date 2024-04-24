@@ -44,13 +44,14 @@
 
 #include "BKE_anim_data.h"
 #include "BKE_attribute.hh"
+#include "BKE_bake_data_block_id.hh"
 #include "BKE_bpath.h"
-#include "BKE_deform.h"
+#include "BKE_deform.hh"
 #include "BKE_editmesh.hh"
 #include "BKE_editmesh_cache.hh"
 #include "BKE_global.h"
-#include "BKE_idtype.h"
-#include "BKE_key.h"
+#include "BKE_idtype.hh"
+#include "BKE_key.hh"
 #include "BKE_lib_id.hh"
 #include "BKE_lib_query.hh"
 #include "BKE_main.hh"
@@ -146,6 +147,10 @@ static void mesh_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const int 
   mesh_dst->runtime->vert_to_face_map_cache = mesh_src->runtime->vert_to_face_map_cache;
   mesh_dst->runtime->vert_to_corner_map_cache = mesh_src->runtime->vert_to_corner_map_cache;
   mesh_dst->runtime->corner_to_face_map_cache = mesh_src->runtime->corner_to_face_map_cache;
+  if (mesh_src->runtime->bake_materials) {
+    mesh_dst->runtime->bake_materials = std::make_unique<blender::bke::bake::BakeMaterialsList>(
+        *mesh_src->runtime->bake_materials);
+  }
 
   /* Only do tessface if we have no faces. */
   const bool do_tessface = ((mesh_src->totface_legacy != 0) && (mesh_src->faces_num == 0));
@@ -451,6 +456,41 @@ bool BKE_mesh_has_custom_loop_normals(Mesh *mesh)
   return CustomData_has_layer(&mesh->corner_data, CD_CUSTOMLOOPNORMAL);
 }
 
+namespace blender::bke {
+
+void mesh_ensure_default_color_attribute_on_add(Mesh &mesh,
+                                                const AttributeIDRef &id,
+                                                AttrDomain domain,
+                                                eCustomDataType data_type)
+{
+  if (id.is_anonymous()) {
+    return;
+  }
+  if (!(CD_TYPE_AS_MASK(data_type) & CD_MASK_COLOR_ALL) ||
+      !(ATTR_DOMAIN_AS_MASK(domain) & ATTR_DOMAIN_MASK_COLOR))
+  {
+    return;
+  }
+  if (mesh.default_color_attribute) {
+    return;
+  }
+  mesh.default_color_attribute = BLI_strdupn(id.name().data(), id.name().size());
+}
+
+void mesh_ensure_required_data_layers(Mesh &mesh)
+{
+  MutableAttributeAccessor attributes = mesh.attributes_for_write();
+  AttributeInitConstruct attribute_init;
+
+  /* Try to create attributes if they do not exist. */
+  attributes.add("position", AttrDomain::Point, CD_PROP_FLOAT3, attribute_init);
+  attributes.add(".edge_verts", AttrDomain::Edge, CD_PROP_INT32_2D, attribute_init);
+  attributes.add(".corner_vert", AttrDomain::Corner, CD_PROP_INT32, attribute_init);
+  attributes.add(".corner_edge", AttrDomain::Corner, CD_PROP_INT32, attribute_init);
+}
+
+}  // namespace blender::bke
+
 void BKE_mesh_free_data_for_undo(Mesh *mesh)
 {
   mesh_free_data(&mesh->id);
@@ -642,41 +682,6 @@ MutableSpan<MDeformVert> Mesh::deform_verts_for_write()
           this->verts_num};
 }
 
-namespace blender::bke {
-
-void mesh_ensure_default_color_attribute_on_add(Mesh &mesh,
-                                                const AttributeIDRef &id,
-                                                AttrDomain domain,
-                                                eCustomDataType data_type)
-{
-  if (id.is_anonymous()) {
-    return;
-  }
-  if (!(CD_TYPE_AS_MASK(data_type) & CD_MASK_COLOR_ALL) ||
-      !(ATTR_DOMAIN_AS_MASK(domain) & ATTR_DOMAIN_MASK_COLOR))
-  {
-    return;
-  }
-  if (mesh.default_color_attribute) {
-    return;
-  }
-  mesh.default_color_attribute = BLI_strdupn(id.name().data(), id.name().size());
-}
-
-static void mesh_ensure_cdlayers_primary(Mesh &mesh)
-{
-  MutableAttributeAccessor attributes = mesh.attributes_for_write();
-  AttributeInitConstruct attribute_init;
-
-  /* Try to create attributes if they do not exist. */
-  attributes.add("position", AttrDomain::Point, CD_PROP_FLOAT3, attribute_init);
-  attributes.add(".edge_verts", AttrDomain::Edge, CD_PROP_INT32_2D, attribute_init);
-  attributes.add(".corner_vert", AttrDomain::Corner, CD_PROP_INT32, attribute_init);
-  attributes.add(".corner_edge", AttrDomain::Corner, CD_PROP_INT32, attribute_init);
-}
-
-}  // namespace blender::bke
-
 Mesh *BKE_mesh_new_nomain(const int verts_num,
                           const int edges_num,
                           const int faces_num,
@@ -691,7 +696,7 @@ Mesh *BKE_mesh_new_nomain(const int verts_num,
   mesh->faces_num = faces_num;
   mesh->corners_num = corners_num;
 
-  blender::bke::mesh_ensure_cdlayers_primary(*mesh);
+  blender::bke::mesh_ensure_required_data_layers(*mesh);
   BKE_mesh_face_offsets_ensure_alloc(mesh);
 
   return mesh;
@@ -793,7 +798,7 @@ Mesh *BKE_mesh_new_nomain_from_template_ex(const Mesh *me_src,
 
   /* The destination mesh should at least have valid primary CD layers,
    * even in cases where the source mesh does not. */
-  blender::bke::mesh_ensure_cdlayers_primary(*me_dst);
+  blender::bke::mesh_ensure_required_data_layers(*me_dst);
   BKE_mesh_face_offsets_ensure_alloc(me_dst);
   if (do_tessface && !CustomData_get_layer(&me_dst->fdata_legacy, CD_MFACE)) {
     CustomData_add_layer(&me_dst->fdata_legacy, CD_MFACE, CD_SET_DEFAULT, me_dst->totface_legacy);
@@ -869,7 +874,7 @@ Mesh *BKE_mesh_from_bmesh_for_eval_nomain(BMesh *bm,
                                           const Mesh *me_settings)
 {
   Mesh *mesh = static_cast<Mesh *>(BKE_id_new_nomain(ID_ME, nullptr));
-  BM_mesh_bm_to_me_for_eval(bm, mesh, cd_mask_extra);
+  BM_mesh_bm_to_me_for_eval(*bm, *mesh, cd_mask_extra);
   BKE_mesh_copy_parameters_for_eval(mesh, me_settings);
   return mesh;
 }

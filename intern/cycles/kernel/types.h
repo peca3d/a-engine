@@ -116,6 +116,9 @@ CCL_NAMESPACE_BEGIN
 #  ifndef WITH_PRINCIPLED_HAIR
 #    undef __PRINCIPLED_HAIR__
 #  endif
+#  ifndef WITH_PATCH_EVAL
+#    undef __PATCH_EVAL__
+#  endif
 #endif
 
 /* Scene-based selective features compilation. */
@@ -1369,7 +1372,7 @@ typedef struct KernelSpotLight {
   float half_cot_half_spot_angle;
   float inv_len_z;
   float spot_smooth;
-  float pad;
+  int is_sphere;
 } KernelSpotLight;
 
 /* PointLight is SpotLight with only radius and invarea being used. */

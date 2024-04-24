@@ -332,6 +332,9 @@ PassMain::Sub *ForwardPipeline::prepass_opaque_add(::Material *blender_mat,
                                                    GPUMaterial *gpumat,
                                                    bool has_motion)
 {
+  BLI_assert_msg(GPU_material_flag_get(gpumat, GPU_MATFLAG_TRANSPARENT) == false,
+                 "Forward Transparent should be registered directly without calling "
+                 "PipelineModule::material_add()");
   PassMain::Sub *pass = (blender_mat->blend_flag & MA_BL_CULL_BACKFACE) ?
                             (has_motion ? prepass_single_sided_moving_ps_ :
                                           prepass_single_sided_static_ps_) :
@@ -395,6 +398,7 @@ PassMain::Sub *ForwardPipeline::material_transparent_add(const Object *ob,
 void ForwardPipeline::render(View &view, Framebuffer &prepass_fb, Framebuffer &combined_fb)
 {
   if (!has_transparent_ && !has_opaque_) {
+    inst_.volume.draw_resolve(view);
     return;
   }
 
@@ -518,12 +522,9 @@ void DeferredLayer::begin_sync()
 
 void DeferredLayer::end_sync()
 {
-  eClosureBits evaluated_closures = CLOSURE_DIFFUSE | CLOSURE_TRANSLUCENT | CLOSURE_REFLECTION |
-                                    CLOSURE_REFRACTION;
-
   use_combined_lightprobe_eval = inst_.pipelines.data.use_combined_lightprobe_eval;
 
-  if (closure_bits_ & evaluated_closures) {
+  {
     RenderBuffersInfoData &rbuf_data = inst_.render_buffers.data;
 
     /* Add the stencil classification step at the end of the GBuffer pass. */
@@ -604,10 +605,15 @@ void DeferredLayer::end_sync()
       /* TODO(fclem): Could specialize directly with the pass index but this would break it for
        * OpenGL and Vulkan implementation which aren't fully supporting the specialize
        * constant. */
-      pass.specialize_constant(
-          sh, "render_pass_diffuse_light_enabled", rbuf_data.diffuse_light_id != -1);
-      pass.specialize_constant(
-          sh, "render_pass_specular_light_enabled", rbuf_data.specular_light_id != -1);
+      pass.specialize_constant(sh,
+                               "render_pass_diffuse_light_enabled",
+                               (rbuf_data.diffuse_light_id != -1) ||
+                                   (rbuf_data.diffuse_color_id != -1));
+      pass.specialize_constant(sh,
+                               "render_pass_specular_light_enabled",
+                               (rbuf_data.specular_light_id != -1) ||
+                                   (rbuf_data.specular_color_id != -1));
+      pass.specialize_constant(sh, "render_pass_normal_enabled", rbuf_data.normal_id != -1);
       pass.specialize_constant(sh, "use_combined_lightprobe_eval", use_combined_lightprobe_eval);
       pass.shader_set(sh);
       /* Use stencil test to reject pixels not written by this layer. */

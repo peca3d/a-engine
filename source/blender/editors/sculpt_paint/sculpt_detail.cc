@@ -20,6 +20,7 @@
 #include "DNA_mesh_types.h"
 
 #include "BKE_context.hh"
+#include "BKE_layer.hh"
 #include "BKE_paint.hh"
 #include "BKE_pbvh_api.hh"
 #include "BKE_screen.hh"
@@ -91,6 +92,12 @@ static int sculpt_detail_flood_fill_exec(bContext *C, wmOperator *op)
   Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
+
+  const View3D *v3d = CTX_wm_view3d(C);
+  const Base *base = CTX_data_active_base(C);
+  if (!BKE_base_is_visible(v3d, base)) {
+    return OPERATOR_CANCELLED;
+  }
 
   Vector<PBVHNode *> nodes = bke::pbvh::search_gather(ss->pbvh, {});
 
@@ -272,6 +279,12 @@ static int sample_detail(bContext *C, const int event_xy[2], int mode)
     return OPERATOR_CANCELLED;
   }
 
+  const View3D *v3d = CTX_wm_view3d(C);
+  const Base *base = CTX_data_active_base(C);
+  if (!BKE_base_is_visible(v3d, base)) {
+    return OPERATOR_CANCELLED;
+  }
+
   const int mval[2] = {
       event_xy[0] - region->winrct.xmin,
       event_xy[1] - region->winrct.ymin,
@@ -314,7 +327,7 @@ static int sculpt_sample_detail_size_exec(bContext *C, wmOperator *op)
 
 static int sculpt_sample_detail_size_invoke(bContext *C, wmOperator *op, const wmEvent * /*event*/)
 {
-  ED_workspace_status_text(C, RPT_("Click on the mesh to set the detail"));
+  ED_workspace_status_text(C, IFACE_("Click on the mesh to set the detail"));
   WM_cursor_modal_set(CTX_wm_window(C), WM_CURSOR_EYEDROPPER);
   WM_event_add_modal_handler(C, op);
   return OPERATOR_RUNNING_MODAL;
@@ -764,7 +777,7 @@ static int dyntopo_detail_size_edit_invoke(bContext *C, wmOperator *op, const wm
 
   ss->draw_faded_cursor = true;
 
-  const char *status_str = RPT_(
+  const char *status_str = IFACE_(
       "Move the mouse to change the dyntopo detail size. LMB: confirm size, ESC/RMB: cancel, "
       "SHIFT: precision mode, CTRL: sample detail size");
   ED_workspace_status_text(C, status_str);

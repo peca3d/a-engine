@@ -26,8 +26,7 @@
 #include "BKE_scene.h"
 #include "BKE_sound.h"
 
-#include "IMB_colormanagement.h"
-#include "IMB_imbuf.h"
+#include "IMB_imbuf.hh"
 
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
@@ -64,7 +63,7 @@
 #include "WM_api.hh"
 #include "WM_types.hh"
 
-#include "BLF_api.h"
+#include "BLF_api.hh"
 
 #include "MEM_guardedalloc.h"
 
@@ -1926,5 +1925,6 @@ void draw_timeline_seq_display(const bContext *C, ARegion *region)
 
   const ListBase *seqbase = SEQ_active_seqbase_get(SEQ_editing_get(scene));
   SEQ_timeline_boundbox(scene, seqbase, &v2d->tot);
-  UI_view2d_scrollers_draw(v2d, nullptr);
+  const rcti scroller_mask = ED_time_scrub_clamp_scroller_mask(v2d->mask);
+  UI_view2d_scrollers_draw(v2d, &scroller_mask);
 }

@@ -24,6 +24,7 @@
 
 #include "BKE_brush.hh"
 #include "BKE_context.hh"
+#include "BKE_layer.hh"
 #include "BKE_modifier.hh"
 #include "BKE_paint.hh"
 #include "BKE_pbvh_api.hh"
@@ -121,7 +122,7 @@ void cache_init(bContext *C,
       pbvh, [&](PBVHNode &node) { return !node_fully_masked_or_hidden(node); });
 
   for (PBVHNode *node : ss->filter_cache->nodes) {
-    BKE_pbvh_node_mark_normals_update(node);
+    BKE_pbvh_node_mark_positions_update(node);
   }
 
   /* `mesh->runtime.subdiv_ccg` is not available. Updating of the normals is done during drawing.
@@ -217,9 +218,6 @@ void cache_free(SculptSession *ss)
   if (ss->filter_cache->cloth_sim) {
     cloth::simulation_free(ss->filter_cache->cloth_sim);
   }
-  if (ss->filter_cache->automasking) {
-    auto_mask::cache_free(ss->filter_cache->automasking);
-  }
   MEM_SAFE_FREE(ss->filter_cache->mask_update_it);
   MEM_SAFE_FREE(ss->filter_cache->prev_mask);
   MEM_SAFE_FREE(ss->filter_cache->normal_factor);
@@ -229,7 +227,7 @@ void cache_free(SculptSession *ss)
   MEM_SAFE_FREE(ss->filter_cache->detail_directions);
   MEM_SAFE_FREE(ss->filter_cache->limit_surface_co);
   MEM_SAFE_FREE(ss->filter_cache->pre_smoothed_color);
-  MEM_delete<filter::Cache>(ss->filter_cache);
+  MEM_delete(ss->filter_cache);
   ss->filter_cache = nullptr;
 }
 
@@ -346,7 +344,7 @@ static void mesh_filter_task(Object *ob,
    * boundaries. */
   const bool relax_face_sets = !(ss->filter_cache->iteration_count % 3 == 0);
   auto_mask::NodeData automask_data = auto_mask::node_begin(
-      *ob, ss->filter_cache->automasking, *node);
+      *ob, ss->filter_cache->automasking.get(), *node);
 
   PBVHVertexIter vd;
   BKE_pbvh_vertex_iter_begin (ss->pbvh, node, vd, PBVH_ITER_UNIQUE) {
@@ -357,7 +355,8 @@ static void mesh_filter_task(Object *ob,
     float fade = vd.mask;
     fade = 1.0f - fade;
     fade *= filter_strength;
-    fade *= auto_mask::factor_get(ss->filter_cache->automasking, ss, vd.vertex, &automask_data);
+    fade *= auto_mask::factor_get(
+        ss->filter_cache->automasking.get(), ss, vd.vertex, &automask_data);
 
     if (fade == 0.0f && filter_type != MESH_FILTER_SURFACE_SMOOTH) {
       /* Surface Smooth can't skip the loop for this vertex as it needs to calculate its
@@ -643,7 +642,7 @@ static void mesh_filter_surface_smooth_displace_task(Object *ob,
   PBVHVertexIter vd;
 
   auto_mask::NodeData automask_data = auto_mask::node_begin(
-      *ob, ss->filter_cache->automasking, *node);
+      *ob, ss->filter_cache->automasking.get(), *node);
 
   BKE_pbvh_vertex_iter_begin (ss->pbvh, node, vd, PBVH_ITER_UNIQUE) {
     auto_mask::node_update(automask_data, vd);
@@ -651,7 +650,8 @@ static void mesh_filter_surface_smooth_displace_task(Object *ob,
     float fade = vd.mask;
     fade = 1.0f - fade;
     fade *= filter_strength;
-    fade *= auto_mask::factor_get(ss->filter_cache->automasking, ss, vd.vertex, &automask_data);
+    fade *= auto_mask::factor_get(
+        ss->filter_cache->automasking.get(), ss, vd.vertex, &automask_data);
     if (fade == 0.0f) {
       continue;
     }
@@ -705,13 +705,13 @@ static void sculpt_mesh_update_status_bar(bContext *C, wmOperator *op)
       op->type, (_id), true, UI_MAX_SHORTCUT_STR, &available_len, &p)
 
   SNPRINTF(header,
-           RPT_("%s: Confirm, %s: Cancel"),
+           IFACE_("%s: Confirm, %s: Cancel"),
            WM_MODALKEY(FILTER_MESH_MODAL_CONFIRM),
            WM_MODALKEY(FILTER_MESH_MODAL_CANCEL));
 
 #undef WM_MODALKEY
 
-  ED_workspace_status_text(C, RPT_(header));
+  ED_workspace_status_text(C, header);
 }
 
 static void sculpt_mesh_filter_apply(bContext *C, wmOperator *op)
@@ -960,6 +960,13 @@ static int sculpt_mesh_filter_start(bContext *C, wmOperator *op)
   Object *ob = CTX_data_active_object(C);
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
+
+  const View3D *v3d = CTX_wm_view3d(C);
+  const Base *base = CTX_data_active_base(C);
+  if (!BKE_base_is_visible(v3d, base)) {
+    return OPERATOR_CANCELLED;
+  }
+
   int mval[2];
   RNA_int_get_array(op->ptr, "start_mouse", mval);
 
@@ -1011,7 +1018,7 @@ static int sculpt_mesh_filter_start(bContext *C, wmOperator *op)
 
   filter::Cache *filter_cache = ss->filter_cache;
   filter_cache->active_face_set = SCULPT_FACE_SET_NONE;
-  filter_cache->automasking = auto_mask::cache_init(sd, nullptr, ob);
+  filter_cache->automasking = auto_mask::cache_init(sd, ob);
 
   sculpt_filter_specific_init(filter_type, op, ss);
 

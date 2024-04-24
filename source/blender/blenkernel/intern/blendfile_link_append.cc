@@ -10,6 +10,7 @@
  * collections/objects/object-data in current scene.
  */
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 
@@ -35,16 +36,18 @@
 
 #include "BLT_translation.h"
 
-#include "BKE_idtype.h"
-#include "BKE_key.h"
-#include "BKE_layer.h"
+#include "BKE_idtype.hh"
+#include "BKE_key.hh"
+#include "BKE_layer.hh"
 #include "BKE_lib_id.hh"
 #include "BKE_lib_override.hh"
 #include "BKE_lib_query.hh"
 #include "BKE_lib_remap.hh"
+#include "BKE_library.hh"
 #include "BKE_main.hh"
 #include "BKE_main_namemap.hh"
 #include "BKE_material.h"
+#include "BKE_mesh_legacy_convert.hh"
 #include "BKE_object.hh"
 #include "BKE_report.h"
 #include "BKE_rigidbody.h"
@@ -518,11 +521,13 @@ static void loose_data_instantiate_ensure_active_collection(
   Scene *scene = instantiate_context->lapp_context->params->context.scene;
   ViewLayer *view_layer = instantiate_context->lapp_context->params->context.view_layer;
 
-  /* Find or add collection as needed. */
+  /* Find or add collection as needed. When `active_collection` is non-null, it is assumed to be
+   * editable. */
   if (instantiate_context->active_collection == nullptr) {
     if (lapp_context->params->flag & FILE_ACTIVE_COLLECTION) {
       LayerCollection *lc = BKE_layer_collection_get_active(view_layer);
-      instantiate_context->active_collection = lc->collection;
+      instantiate_context->active_collection = BKE_collection_parent_editable_find_recursive(
+          view_layer, lc->collection);
     }
     else {
       if (lapp_context->params->flag & FILE_LINK) {
@@ -558,7 +563,7 @@ static void loose_data_instantiate_object_base_instance_init(Main *bmain,
   Base *base = BKE_view_layer_base_find(view_layer, ob);
 
   if (v3d != nullptr) {
-    base->local_view_bits |= v3d->local_view_uuid;
+    base->local_view_bits |= v3d->local_view_uid;
   }
 
   if (flag & FILE_AUTOSELECT) {
@@ -1373,6 +1378,7 @@ void BKE_blendfile_append(BlendfileLinkAppendContext *lapp_context, ReportList *
   BKE_main_id_newptr_and_tag_clear(bmain);
 
   blendfile_link_append_proxies_convert(bmain, reports);
+  BKE_main_mesh_legacy_convert_auto_smooth(*bmain);
 }
 
 void BKE_blendfile_link(BlendfileLinkAppendContext *lapp_context, ReportList *reports)
@@ -1489,6 +1495,7 @@ void BKE_blendfile_link(BlendfileLinkAppendContext *lapp_context, ReportList *re
 
   if ((lapp_context->params->flag & FILE_LINK) != 0) {
     blendfile_link_append_proxies_convert(lapp_context->params->bmain, reports);
+    BKE_main_mesh_legacy_convert_auto_smooth(*lapp_context->params->bmain);
   }
 
   BKE_main_namemap_clear(lapp_context->params->bmain);
@@ -1656,7 +1663,7 @@ static void blendfile_library_relocate_remap(Main *bmain,
       old_id->name[dot_pos] = '~';
     }
     else {
-      len = MIN2(len, MAX_ID_NAME - 7);
+      len = std::min<size_t>(len, MAX_ID_NAME - 7);
       BLI_strncpy(&old_id->name[len], "~000", 7);
     }
 
@@ -1893,7 +1900,7 @@ void BKE_blendfile_library_relocate(BlendfileLinkAppendContext *lapp_context,
     if (lib->id.tag & LIB_TAG_DOIT) {
       id_us_clear_real(&lib->id);
       if (lib->id.us == 0) {
-        BKE_id_free(bmain, (ID *)lib);
+        BKE_id_delete(bmain, lib);
       }
     }
   }
@@ -1914,6 +1921,8 @@ void BKE_blendfile_library_relocate(BlendfileLinkAppendContext *lapp_context,
     }
   }
   FOREACH_MAIN_ID_END;
+
+  BKE_library_main_rebuild_hierarchy(bmain);
 
   /* Resync overrides if needed. */
   if (!USER_EXPERIMENTAL_TEST(&U, no_override_auto_resync)) {

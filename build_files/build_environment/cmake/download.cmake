@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 ## Update and uncomment this in the release branch
-# set(BLENDER_VERSION 3.1)
+set(BLENDER_VERSION 4.1)
 
 function(download_source dep)
   set(TARGET_FILE ${${dep}_FILE})
@@ -12,9 +12,9 @@ function(download_source dep)
   if(PACKAGE_USE_UPSTREAM_SOURCES)
     set(TARGET_URI  ${${dep}_URI})
   elseif(BLENDER_VERSION)
-    set(TARGET_URI https://svn.blender.org/svnroot/bf-blender/tags/blender-${BLENDER_VERSION}-release/lib/packages/${TARGET_FILE})
+    set(TARGET_URI https://projects.blender.org/blender/lib-source/media/branch/blender-v${BLENDER_VERSION}-release/${TARGET_FILE})
   else()
-    set(TARGET_URI https://svn.blender.org/svnroot/bf-blender/trunk/lib/packages/${TARGET_FILE})
+    set(TARGET_URI https://projects.blender.org/blender/lib-source/media/branch/main/${TARGET_FILE})
   endif()
   # Validate all required variables are set and give an explicit error message
   # rather than CMake erroring out later on with a more ambigious error.

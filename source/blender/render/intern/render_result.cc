@@ -14,7 +14,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_ghash.h"
-#include "BLI_hash_md5.h"
+#include "BLI_hash_md5.hh"
 #include "BLI_implicit_sharing.hh"
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
@@ -24,7 +24,7 @@
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_appdir.h"
+#include "BKE_appdir.hh"
 #include "BKE_camera.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
@@ -34,10 +34,10 @@
 #include "BKE_report.h"
 #include "BKE_scene.h"
 
-#include "IMB_colormanagement.h"
-#include "IMB_imbuf.h"
-#include "IMB_imbuf_types.h"
-#include "IMB_openexr.h"
+#include "IMB_colormanagement.hh"
+#include "IMB_imbuf.hh"
+#include "IMB_imbuf_types.hh"
+#include "IMB_openexr.hh"
 
 #include "GPU_texture.h"
 
@@ -1019,7 +1019,10 @@ static void render_result_exr_file_cache_path(Scene *sce,
 
   BLI_path_join(r_path, FILE_CACHE_MAX, root, filename_full);
   if (BLI_path_is_rel(r_path)) {
-    BLI_path_abs(r_path, dirname);
+    char path_temp[FILE_MAX];
+    STRNCPY(path_temp, r_path);
+    BLI_path_abs(path_temp, dirname);
+    BLI_strncpy(r_path, path_temp, FILE_CACHE_MAX);
   }
 }
 

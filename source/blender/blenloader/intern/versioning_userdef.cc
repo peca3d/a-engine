@@ -481,7 +481,7 @@ void blo_do_versions_userdef(UserDef *userdef)
   }
 
   if (!USER_VERSION_ATLEAST(275, 2)) {
-    userdef->ndof_deadzone = 0.1;
+    userdef->ndof_deadzone = 0.0;
   }
 
   if (!USER_VERSION_ATLEAST(275, 4)) {
@@ -729,7 +729,7 @@ void blo_do_versions_userdef(UserDef *userdef)
       userdef->pixelsize = 1.0f;
     }
     /* Clear old userdef flag for "Camera Parent Lock". */
-    userdef->uiflag &= ~USER_UIFLAG_UNUSED_3;
+    userdef->uiflag &= ~USER_ACCUMULATE_TRACKBALL;
   }
 
   if (!USER_VERSION_ATLEAST(292, 9)) {
@@ -913,6 +913,14 @@ void blo_do_versions_userdef(UserDef *userdef)
       userdef->keying_flag |= MANUALKEY_FLAG_INSERTNEEDED;
     }
     userdef->keying_flag |= AUTOKEY_FLAG_INSERTNEEDED;
+  }
+
+  if (!USER_VERSION_ATLEAST(401, 21)) {
+    LISTBASE_FOREACH (wmKeyMap *, km, &userdef->user_keymaps) {
+      if (STREQ(km->idname, "NLA Channels")) {
+        STRNCPY(km->idname, "NLA Tracks");
+      }
+    }
   }
 
   /**

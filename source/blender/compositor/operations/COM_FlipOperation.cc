@@ -62,50 +62,6 @@ bool FlipOperation::determine_depending_area_of_interest(rcti *input,
   return NodeOperation::determine_depending_area_of_interest(&new_input, read_operation, output);
 }
 
-void FlipOperation::determine_canvas(const rcti &preferred_area, rcti &r_area)
-{
-  NodeOperation::determine_canvas(preferred_area, r_area);
-  if (execution_model_ == eExecutionModel::FullFrame) {
-    rcti input_area = r_area;
-    if (flip_x_) {
-      const int width = BLI_rcti_size_x(&input_area) - 1;
-      r_area.xmax = (width - input_area.xmin) + 1;
-      r_area.xmin = (width - input_area.xmax) + 1;
-    }
-    if (flip_y_) {
-      const int height = BLI_rcti_size_y(&input_area) - 1;
-      r_area.ymax = (height - input_area.ymin) + 1;
-      r_area.ymin = (height - input_area.ymax) + 1;
-    }
-  }
-}
-
-void FlipOperation::get_area_of_interest(const int input_idx,
-                                         const rcti &output_area,
-                                         rcti &r_input_area)
-{
-  BLI_assert(input_idx == 0);
-  UNUSED_VARS_NDEBUG(input_idx);
-  if (flip_x_) {
-    const int w = int(this->get_width()) - 1;
-    r_input_area.xmax = (w - output_area.xmin) + 1;
-    r_input_area.xmin = (w - output_area.xmax) + 1;
-  }
-  else {
-    r_input_area.xmin = output_area.xmin;
-    r_input_area.xmax = output_area.xmax;
-  }
-  if (flip_y_) {
-    const int h = int(this->get_height()) - 1;
-    r_input_area.ymax = (h - output_area.ymin) + 1;
-    r_input_area.ymin = (h - output_area.ymax) + 1;
-  }
-  else {
-    r_input_area.ymin = output_area.ymin;
-    r_input_area.ymax = output_area.ymax;
-  }
-}
-
 void FlipOperation::update_memory_buffer_partial(MemoryBuffer *output,
                                                  const rcti &area,
                                                  Span<MemoryBuffer *> inputs)

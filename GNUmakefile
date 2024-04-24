@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-# This Makefile does an out-of-source CMake build in ../build_`OS`_`CPU`
+# This Makefile does an out-of-source CMake build in ../build_`OS`
 # eg:
 #   ../build_linux_i386
 # This is for users who like to configure & build blender with a single command.
@@ -35,7 +35,7 @@ Other Convenience Targets
    * deps:          Build library dependencies (intended only for platform maintainers).
 
                     The existence of locally build dependencies overrides the pre-built dependencies from subversion.
-                    These must be manually removed from '../lib/' to go back to using the pre-compiled libraries.
+                    These must be manually removed from 'lib/' to go back to using the pre-compiled libraries.
 
 Project Files
    Generate project files for development environments.
@@ -73,8 +73,8 @@ Static Source Code Checking
 
 Documentation Checking
 
-   * check_wiki_file_structure:
-     Check the WIKI documentation for the source-tree's file structure
+   * check_docs_file_structure:
+     Check the documentation for the source-tree's file structure
      matches Blender's source-code.
      See: https://developer.blender.org/docs/features/code_layout/
 
@@ -165,6 +165,16 @@ OS:=$(shell uname -s)
 OS_NCASE:=$(shell uname -s | tr '[A-Z]' '[a-z]')
 CPU:=$(shell uname -m)
 
+# Use our OS and CPU architecture naming conventions.
+ifeq ($(CPU),x86_64)
+	CPU:=x64
+endif
+ifeq ($(OS_NCASE),darwin)
+	OS_LIBDIR:=macos
+else
+	OS_LIBDIR:=$(OS_NCASE)
+endif
+
 
 # Source and Build DIR's
 BLENDER_DIR:=$(shell pwd -P)
@@ -186,26 +196,13 @@ ifndef DEPS_BUILD_DIR
 endif
 
 ifndef DEPS_INSTALL_DIR
-	DEPS_INSTALL_DIR:=$(shell dirname "$(BLENDER_DIR)")/lib/$(OS_NCASE)
-
-	# Add processor type to directory name, except for darwin x86_64
-	# which by convention does not have it.
-	ifeq ($(OS_NCASE),darwin)
-		ifneq ($(CPU),x86_64)
-			DEPS_INSTALL_DIR:=$(DEPS_INSTALL_DIR)_$(CPU)
-		endif
-	else
-		DEPS_INSTALL_DIR:=$(DEPS_INSTALL_DIR)_$(CPU)
-	endif
+	DEPS_INSTALL_DIR:=$(shell dirname "$(BLENDER_DIR)")/lib/$(OS_LIBDIR)_$(CPU)
 endif
 
 # Set the LIBDIR, an empty string when not found.
-LIBDIR:=$(wildcard ../lib/${OS_NCASE}_${CPU})
+LIBDIR:=$(wildcard $(BLENDER_DIR)/lib/${OS_LIBDIR}_${CPU})
 ifeq (, $(LIBDIR))
-	LIBDIR:=$(wildcard ../lib/${OS_NCASE}_${CPU}_glibc_228)
-endif
-ifeq (, $(LIBDIR))
-	LIBDIR:=$(wildcard ../lib/${OS_NCASE})
+	LIBDIR:=$(wildcard $(BLENDER_DIR)/lib/${OS_LIBDIR})
 endif
 
 # Find the newest Python version bundled in `LIBDIR`.
@@ -236,6 +233,10 @@ ifndef PYTHON
 		ifeq (, $(shell command -v $(PYTHON)))
 			PYTHON:=python
 		endif
+	else
+		# Don't generate __pycache__ files in lib folder, they
+		# can interfere with updates.
+		PYTHON:=$(PYTHON) -B
 	endif
 endif
 
@@ -499,9 +500,9 @@ check_clang_array: .FORCE
 check_mypy: .FORCE
 	@$(PYTHON) "$(BLENDER_DIR)/tools/check_source/check_mypy.py"
 
-check_wiki_file_structure: .FORCE
+check_docs_file_structure: .FORCE
 	@PYTHONIOENCODING=utf_8 $(PYTHON) \
-	    "$(BLENDER_DIR)/tools/check_wiki/check_wiki_file_structure.py"
+	    "$(BLENDER_DIR)/tools/check_docs/check_docs_code_layout.py"
 
 check_spelling_py: .FORCE
 	@PYTHONIOENCODING=utf_8 $(PYTHON) \
@@ -566,14 +567,10 @@ source_archive_complete: .FORCE
 # This assumes CMake is still using a default `PACKAGE_DIR` variable:
 	@$(PYTHON) ./build_files/utils/make_source_archive.py --include-packages "$(BUILD_DIR)/source_archive/packages"
 
-INKSCAPE_BIN?="inkscape"
 icons: .FORCE
-	@BLENDER_BIN=$(BLENDER_BIN) INKSCAPE_BIN=$(INKSCAPE_BIN) \
-	    "$(BLENDER_DIR)/release/datafiles/blender_icons_update.py"
-	@INKSCAPE_BIN=$(INKSCAPE_BIN) \
-	    "$(BLENDER_DIR)/release/datafiles/prvicons_update.py"
-	@INKSCAPE_BIN=$(INKSCAPE_BIN) \
-	    "$(BLENDER_DIR)/release/datafiles/alert_icons_update.py"
+	@BLENDER_BIN=$(BLENDER_BIN) "$(BLENDER_DIR)/release/datafiles/blender_icons_update.py"
+	"$(BLENDER_DIR)/release/datafiles/prvicons_update.py"
+	"$(BLENDER_DIR)/release/datafiles/alert_icons_update.py"
 
 icons_geom: .FORCE
 	@BLENDER_BIN=$(BLENDER_BIN) \

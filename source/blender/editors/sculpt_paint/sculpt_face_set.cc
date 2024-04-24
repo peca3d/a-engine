@@ -37,6 +37,7 @@
 #include "BKE_colortools.hh"
 #include "BKE_context.hh"
 #include "BKE_customdata.hh"
+#include "BKE_layer.hh"
 #include "BKE_mesh.hh"
 #include "BKE_mesh_fair.hh"
 #include "BKE_mesh_mapping.hh"
@@ -203,7 +204,7 @@ static void do_draw_face_sets_brush_faces(Object *ob,
           ss, &test, brush->falloff_shape);
 
       auto_mask::NodeData automask_data = auto_mask::node_begin(
-          *ob, ss->cache->automasking, *node);
+          *ob, ss->cache->automasking.get(), *node);
 
       bool changed = false;
 
@@ -269,7 +270,7 @@ static void do_draw_face_sets_brush_grids(Object *ob,
           ss, &test, brush->falloff_shape);
 
       auto_mask::NodeData automask_data = auto_mask::node_begin(
-          *ob, ss->cache->automasking, *node);
+          *ob, ss->cache->automasking.get(), *node);
 
       bool changed = false;
 
@@ -292,7 +293,8 @@ static void do_draw_face_sets_brush_grids(Object *ob,
                                                                     &automask_data);
 
         if (fade > FACE_SET_BRUSH_MIN_FADE) {
-          const int face_index = BKE_subdiv_ccg_grid_to_face_index(subdiv_ccg, vd.g);
+          const int face_index = BKE_subdiv_ccg_grid_to_face_index(subdiv_ccg,
+                                                                   vd.grid_indices[vd.g]);
           face_sets[face_index] = ss->cache->paint_face_set;
           changed = true;
         }
@@ -414,7 +416,8 @@ static void do_relax_face_sets_brush_task(Object *ob,
   }
 
   const int thread_id = BLI_task_parallel_thread_id(nullptr);
-  auto_mask::NodeData automask_data = auto_mask::node_begin(*ob, ss->cache->automasking, *node);
+  auto_mask::NodeData automask_data = auto_mask::node_begin(
+      *ob, ss->cache->automasking.get(), *node);
 
   BKE_pbvh_vertex_iter_begin (ss->pbvh, node, vd, PBVH_ITER_UNIQUE) {
     auto_mask::node_update(automask_data, vd);
@@ -490,8 +493,10 @@ static void face_sets_update(Object &object,
   threading::parallel_for(nodes.index_range(), 1, [&](const IndexRange range) {
     TLS &tls = all_tls.local();
     for (PBVHNode *node : nodes.slice(range)) {
-      const Span<int> faces = bke::pbvh::node_face_indices_calc_mesh(
-          pbvh, *node, tls.face_indices);
+      const Span<int> faces =
+          BKE_pbvh_type(&pbvh) == PBVH_FACES ?
+              bke::pbvh::node_face_indices_calc_mesh(pbvh, *node, tls.face_indices) :
+              bke::pbvh::node_face_indices_calc_grids(pbvh, *node, tls.face_indices);
 
       tls.new_face_sets.reinitialize(faces.size());
       MutableSpan<int> new_face_sets = tls.new_face_sets;
@@ -533,7 +538,10 @@ static void clear_face_sets(Object &object, const Span<PBVHNode *> nodes)
   threading::parallel_for(nodes.index_range(), 1, [&](const IndexRange range) {
     Vector<int> &face_indices = all_face_indices.local();
     for (PBVHNode *node : nodes.slice(range)) {
-      const Span<int> faces = bke::pbvh::node_face_indices_calc_mesh(pbvh, *node, face_indices);
+      const Span<int> faces =
+          (BKE_pbvh_type(&pbvh) == PBVH_FACES) ?
+              bke::pbvh::node_face_indices_calc_mesh(pbvh, *node, face_indices) :
+              bke::pbvh::node_face_indices_calc_grids(pbvh, *node, face_indices);
       if (std::any_of(faces.begin(), faces.end(), [&](const int face) {
             return face_sets[face] != default_face_set;
           }))
@@ -553,6 +561,12 @@ static int sculpt_face_set_create_exec(bContext *C, wmOperator *op)
   Depsgraph &depsgraph = *CTX_data_depsgraph_pointer(C);
 
   const CreateMode mode = CreateMode(RNA_enum_get(op->ptr, "mode"));
+
+  const View3D *v3d = CTX_wm_view3d(C);
+  const Base *base = CTX_data_active_base(C);
+  if (!BKE_base_is_visible(v3d, base)) {
+    return OPERATOR_CANCELLED;
+  }
 
   if (BKE_pbvh_type(ss.pbvh) == PBVH_BMESH) {
     /* Dyntopo not supported. */
@@ -777,6 +791,12 @@ static int sculpt_face_set_init_exec(bContext *C, wmOperator *op)
 
   const InitMode mode = InitMode(RNA_enum_get(op->ptr, "mode"));
 
+  const View3D *v3d = CTX_wm_view3d(C);
+  const Base *base = CTX_data_active_base(C);
+  if (!BKE_base_is_visible(v3d, base)) {
+    return OPERATOR_CANCELLED;
+  }
+
   BKE_sculpt_update_object_for_edit(depsgraph, ob, false);
 
   /* Dyntopo not supported. */
@@ -979,8 +999,10 @@ static void face_hide_update(Object &object,
   threading::parallel_for(nodes.index_range(), 1, [&](const IndexRange range) {
     TLS &tls = all_tls.local();
     for (PBVHNode *node : nodes.slice(range)) {
-      const Span<int> faces = bke::pbvh::node_face_indices_calc_mesh(
-          pbvh, *node, tls.face_indices);
+      const Span<int> faces =
+          (BKE_pbvh_type(&pbvh) == PBVH_FACES) ?
+              bke::pbvh::node_face_indices_calc_mesh(pbvh, *node, tls.face_indices) :
+              bke::pbvh::node_face_indices_calc_grids(pbvh, *node, tls.face_indices);
 
       tls.new_hide.reinitialize(faces.size());
       MutableSpan<bool> new_hide = tls.new_hide;
@@ -1121,6 +1143,12 @@ static int sculpt_face_set_change_visibility_invoke(bContext *C,
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
 
+  const View3D *v3d = CTX_wm_view3d(C);
+  const Base *base = CTX_data_active_base(C);
+  if (!BKE_base_is_visible(v3d, base)) {
+    return OPERATOR_CANCELLED;
+  }
+
   /* Update the active vertex and Face Set using the cursor position to avoid relying on the paint
    * cursor updates. */
   SculptCursorGeometryInfo sgi;
@@ -1168,6 +1196,12 @@ static int sculpt_face_sets_randomize_colors_exec(bContext *C, wmOperator * /*op
 {
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
+
+  const View3D *v3d = CTX_wm_view3d(C);
+  const Base *base = CTX_data_active_base(C);
+  if (!BKE_base_is_visible(v3d, base)) {
+    return OPERATOR_CANCELLED;
+  }
 
   /* Dyntopo not supported. */
   if (BKE_pbvh_type(ss->pbvh) == PBVH_BMESH) {
@@ -1540,6 +1574,12 @@ static int sculpt_face_set_edit_invoke(bContext *C, wmOperator *op, const wmEven
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
+
+  const View3D *v3d = CTX_wm_view3d(C);
+  const Base *base = CTX_data_active_base(C);
+  if (!BKE_base_is_visible(v3d, base)) {
+    return OPERATOR_CANCELLED;
+  }
 
   BKE_sculpt_update_object_for_edit(depsgraph, ob, false);
 

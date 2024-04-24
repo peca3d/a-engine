@@ -1,9 +1,9 @@
 
 msgid ""
 msgstr ""
-"Project-Id-Version: Blender 4.1.0 Alpha (b'acbb91b192da')\n"
+"Project-Id-Version: Blender 4.1.0 Release Candidate (b'64bfe491645f')\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-01-15 10:52:30\n"
+"POT-Creation-Date: 2020-01-01 00:00+0000\n"
 "PO-Revision-Date: 2008-03-23 12:20+0200\n"
 "Last-Translator: Kostas Karvouniaris <neogen556@yahoo.gr>\n"
 "Language-Team: \n"
@@ -233,10 +233,6 @@ msgid "Camera"
 msgstr "Κάμερα"
 
 
-msgid "Track"
-msgstr "Ανίχνευση"
-
-
 msgid "Bone"
 msgstr "Οστό"
 
@@ -255,10 +251,6 @@ msgstr "Μπροστά"
 
 msgid "Back"
 msgstr "Πίσω"
-
-
-msgid "Bezier"
-msgstr "Bezier"
 
 
 msgid "Surface"
@@ -579,6 +571,10 @@ msgstr "Κωδικοποιητής"
 
 msgid "Keyboard"
 msgstr "Πληκτρολόγιο"
+
+
+msgid "Track"
+msgstr "Ανίχνευση"
 
 
 msgid "Snap"
@@ -991,10 +987,6 @@ msgid "The default directory to search for sounds"
 msgstr "Ο προκαθορισμένος φάκελος για αναζήτηση ήχων"
 
 
-msgid "The directory for storing temporary save files"
-msgstr "Ο προκαθορισμένος φάκελος για αποθήκευση προσωρινών αρχείων"
-
-
 msgid "The default directory to search for textures"
 msgstr "Ο προκαθορισμένος φάκελος για αναζήτηση υφών"
 
@@ -1021,10 +1013,6 @@ msgstr "Μετάβαση Γάμμα"
 
 msgid "Lens"
 msgstr "Φακός"
-
-
-msgid "Bezier U"
-msgstr "Bezier U"
 
 
 msgid "Stencil"

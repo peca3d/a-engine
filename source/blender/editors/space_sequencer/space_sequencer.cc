@@ -49,7 +49,7 @@
 
 #include "BLO_read_write.hh"
 
-#include "IMB_imbuf.h"
+#include "IMB_imbuf.hh"
 
 /* Only for cursor drawing. */
 #include "DRW_engine.hh"
@@ -675,7 +675,21 @@ static void sequencer_tools_region_init(wmWindowManager *wm, ARegion *region)
 
 static void sequencer_tools_region_draw(const bContext *C, ARegion *region)
 {
-  ED_region_panels(C, region);
+  ScrArea *area = CTX_wm_area(C);
+  wmOperatorCallContext op_context = WM_OP_INVOKE_REGION_WIN;
+
+  LISTBASE_FOREACH (ARegion *, ar, &area->regionbase) {
+    if (ar->regiontype == RGN_TYPE_PREVIEW && region->regiontype == RGN_TYPE_TOOLS) {
+      op_context = WM_OP_INVOKE_REGION_PREVIEW;
+      break;
+    }
+  }
+
+  if (region->regiontype == RGN_TYPE_CHANNELS) {
+    op_context = WM_OP_INVOKE_REGION_CHANNELS;
+  }
+
+  ED_region_panels_ex(C, region, op_context, nullptr);
 }
 /* *********************** preview region ************************ */
 
@@ -964,7 +978,7 @@ static void sequencer_space_blend_write(BlendWriter *writer, SpaceLink *sl)
 
 void ED_spacetype_sequencer()
 {
-  SpaceType *st = MEM_cnew<SpaceType>("spacetype sequencer");
+  std::unique_ptr<SpaceType> st = std::make_unique<SpaceType>();
   ARegionType *art;
 
   st->spaceid = SPACE_SEQ;
@@ -1078,7 +1092,7 @@ void ED_spacetype_sequencer()
   art = ED_area_type_hud(st->spaceid);
   BLI_addhead(&st->regiontypes, art);
 
-  BKE_spacetype_register(st);
+  BKE_spacetype_register(std::move(st));
 
   /* Set the sequencer callback when not in background mode. */
   if (G.background == 0) {

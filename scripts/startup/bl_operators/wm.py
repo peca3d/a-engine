@@ -1240,7 +1240,7 @@ def _wm_doc_get_id(doc_id, *, do_url=True, url_prefix="", report=None):
 
             if rna_class is None:
                 if report is not None:
-                    report({'ERROR'}, rpt_("Type \"%s\" can not be found") % class_name)
+                    report({'ERROR'}, rpt_("Type \"%s\" cannot be found") % class_name)
                 return None
 
             # Detect if this is a inherited member and use that name instead.
@@ -1907,7 +1907,7 @@ class WM_OT_properties_edit(Operator):
 
         item = eval("context.%s" % data_path)
         if (item.id_data and item.id_data.override_library and item.id_data.override_library.reference):
-            self.report({'ERROR'}, "Properties from override data can not be edited")
+            self.report({'ERROR'}, "Properties from override data cannot be edited")
             return {'CANCELLED'}
 
         # Set operator's property type with the type of the existing property, to display the right settings.
@@ -2655,10 +2655,11 @@ class BatchRenameAction(bpy.types.PropertyGroup):
 
 
 class WM_OT_batch_rename(Operator):
+    """Rename multiple items at once"""
+
     bl_idname = "wm.batch_rename"
     bl_label = "Batch Rename"
 
-    bl_description = "Rename multiple items at once"
     bl_options = {'UNDO'}
 
     data_type: EnumProperty(
@@ -2721,6 +2722,25 @@ class WM_OT_batch_rename(Operator):
             if isinstance(id := id_base.data if isinstance(id_base, Object) else id_base, ty)
             if id.library is None
         ]))
+
+    @staticmethod
+    def _selected_actions_from_outliner(context):
+        # Actions are a special case because they can be accessed directly or via animation-data.
+        from bpy.types import Action
+
+        def action_from_any_id(id_data):
+            if isinstance(id_data, Action):
+                return id_data
+            # Not all ID's have animation data.
+            if (animation_data := getattr(id_data, "animation_data", None)) is not None:
+                return animation_data.action
+            return None
+
+        return tuple(set(
+            action for id in context.selected_ids
+            if (action := action_from_any_id(id)) is not None
+            if action.library is None
+        ))
 
     @classmethod
     def _data_from_context(cls, context, data_type, only_selected, *, check_context=False):
@@ -2865,12 +2885,7 @@ class WM_OT_batch_rename(Operator):
                 data = (
                     (
                         # Outliner.
-                        tuple(set(
-                            action for id in context.selected_ids
-                            if (((animation_data := id.animation_data) is not None) and
-                                ((action := animation_data.action) is not None) and
-                                (action.library is None))
-                        ))
+                        cls._selected_actions_from_outliner(context)
                         if space_type == 'OUTLINER' else
                         # 3D View (default).
                         tuple(set(
@@ -3486,7 +3501,8 @@ class WM_MT_region_toggle_pie(Menu):
             text = enum_items[region_type].name
             attr = cls._region_info[region_type]
             value = getattr(space_data, attr)
-            props = pie.operator("wm.context_toggle", text=text, icon='CHECKBOX_HLT' if value else 'CHECKBOX_DEHLT')
+            props = pie.operator("wm.context_toggle", text=text, text_ctxt=i18n_contexts.default,
+                                 icon='CHECKBOX_HLT' if value else 'CHECKBOX_DEHLT')
             props.data_path = "space_data." + attr
 
     def draw(self, context):

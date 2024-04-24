@@ -17,7 +17,7 @@
 #include "BLI_sys_types.h"
 #include "BLI_utildefines.h"
 
-#include "rna_internal.h" /* own include */
+#include "rna_internal.hh" /* own include */
 
 #ifdef RNA_RUNTIME
 
@@ -200,6 +200,8 @@ static void rna_Mesh_clear_geometry(Mesh *mesh)
 {
   BKE_mesh_clear_geometry_and_metadata(mesh);
   BKE_animdata_free(&mesh->id, false);
+
+  blender::bke::mesh_ensure_required_data_layers(*mesh);
 
   DEG_id_tag_update(&mesh->id, ID_RECALC_GEOMETRY_ALL_MODES);
   WM_main_add_notifier(NC_GEOM | ND_DATA, mesh);

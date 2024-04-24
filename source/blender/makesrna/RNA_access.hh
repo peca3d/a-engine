@@ -2,7 +2,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
-/* Use a define instead of `#pragma once` because of `rna_internal.h` */
+/* Use a define instead of `#pragma once` because of `rna_internal.hh` */
 #ifndef __RNA_ACCESS_H__
 #define __RNA_ACCESS_H__
 
@@ -10,7 +10,9 @@
  * \ingroup RNA
  */
 
+#include <optional>
 #include <stdarg.h>
+#include <string>
 
 #include "RNA_types.hh"
 
@@ -285,29 +287,60 @@ int RNA_property_enum_bitflag_identifiers(
 StructRNA *RNA_property_pointer_type(PointerRNA *ptr, PropertyRNA *prop);
 bool RNA_property_pointer_poll(PointerRNA *ptr, PropertyRNA *prop, PointerRNA *value);
 
-bool RNA_property_editable(PointerRNA *ptr, PropertyRNA *prop);
+bool RNA_property_editable(const PointerRNA *ptr, PropertyRNA *prop);
 /**
  * Version of #RNA_property_editable that tries to return additional info in \a r_info
  * that can be exposed in UI.
  */
-bool RNA_property_editable_info(PointerRNA *ptr, PropertyRNA *prop, const char **r_info);
+bool RNA_property_editable_info(const PointerRNA *ptr, PropertyRNA *prop, const char **r_info);
 /**
  * Same as RNA_property_editable(), except this checks individual items in an array.
  */
-bool RNA_property_editable_index(PointerRNA *ptr, PropertyRNA *prop, const int index);
+bool RNA_property_editable_index(const PointerRNA *ptr, PropertyRNA *prop, const int index);
 
 /**
  * Without lib check, only checks the flag.
  */
-bool RNA_property_editable_flag(PointerRNA *ptr, PropertyRNA *prop);
+bool RNA_property_editable_flag(const PointerRNA *ptr, PropertyRNA *prop);
 
+/**
+ * A property is animateable if its ID and the RNA property itself are defined as editable.
+ * It does not imply that user can _edit_ such animation though, see #RNA_property_anim_editable
+ * for this.
+ *
+ * This check is only based on information stored in the data _types_ (IDTypeInfo and RNA property
+ * definition), not on the actual data itself.
+ */
 bool RNA_property_animateable(const PointerRNA *ptr, PropertyRNA *prop);
+/**
+ * A property is anim-editable if it is animateable, and the related data is editable.
+ *
+ * Unlike #RNA_property_animateable, this check the actual data referenced by the RNA pointer and
+ * property, and not only their type info.
+ *
+ * Typically (with a few exceptions like the #PROP_LIB_EXCEPTION PropertyRNA flag), editable data
+ * belongs to local ID.
+ */
+bool RNA_property_anim_editable(const PointerRNA *ptr, PropertyRNA *prop);
 bool RNA_property_animated(PointerRNA *ptr, PropertyRNA *prop);
+/**
+ * With LibOverrides, a property may be animatable and anim-editable, but not driver-editable (in
+ * case the reference data already has an animation data, its Action can ba an editable local ID,
+ * but the drivers are directly stored in the animdata, overriding these is not supported
+ * currently).
+ *
+ * Like #RNA_property_anim_editable, this also checks the actual data referenced by the RNA pointer
+ * and property.
+ *
+ * Currently, it is assumed that if an IDType and RNAProperty are animatable, they are also
+ * driveable, so #RNA_property_animateable can be used for drivers as well.
+ */
+bool RNA_property_driver_editable(const PointerRNA *ptr, PropertyRNA *prop);
 /**
  * \note Does not take into account editable status, this has to be checked separately
  * (using #RNA_property_editable_flag() usually).
  */
-bool RNA_property_overridable_get(PointerRNA *ptr, PropertyRNA *prop);
+bool RNA_property_overridable_get(const PointerRNA *ptr, PropertyRNA *prop);
 /**
  * Should only be used for custom properties.
  */
@@ -636,34 +669,34 @@ void RNA_struct_property_unset(PointerRNA *ptr, const char *identifier);
 /**
  * Python compatible string representation of this property, (must be freed!).
  */
-char *RNA_property_as_string(
+std::string RNA_property_as_string(
     bContext *C, PointerRNA *ptr, PropertyRNA *prop, int index, int max_prop_length);
 /**
  * String representation of a property, Python compatible but can be used for display too.
  * \param C: can be NULL.
  */
-char *RNA_pointer_as_string_id(bContext *C, PointerRNA *ptr);
-char *RNA_pointer_as_string(bContext *C,
-                            PointerRNA *ptr,
-                            PropertyRNA *prop_ptr,
-                            PointerRNA *ptr_prop);
+std::string RNA_pointer_as_string_id(bContext *C, PointerRNA *ptr);
+std::optional<std::string> RNA_pointer_as_string(bContext *C,
+                                                 PointerRNA *ptr,
+                                                 PropertyRNA *prop_ptr,
+                                                 PointerRNA *ptr_prop);
 /**
  * \param C: can be NULL.
  */
-char *RNA_pointer_as_string_keywords_ex(bContext *C,
-                                        PointerRNA *ptr,
-                                        bool as_function,
-                                        bool all_args,
-                                        bool nested_args,
-                                        int max_prop_length,
-                                        PropertyRNA *iterprop);
-char *RNA_pointer_as_string_keywords(bContext *C,
-                                     PointerRNA *ptr,
-                                     bool as_function,
-                                     bool all_args,
-                                     bool nested_args,
-                                     int max_prop_length);
-char *RNA_function_as_string_keywords(
+std::string RNA_pointer_as_string_keywords_ex(bContext *C,
+                                              PointerRNA *ptr,
+                                              bool as_function,
+                                              bool all_args,
+                                              bool nested_args,
+                                              int max_prop_length,
+                                              PropertyRNA *iterprop);
+std::string RNA_pointer_as_string_keywords(bContext *C,
+                                           PointerRNA *ptr,
+                                           bool as_function,
+                                           bool all_args,
+                                           bool nested_args,
+                                           int max_prop_length);
+std::string RNA_function_as_string_keywords(
     bContext *C, FunctionRNA *func, bool as_function, bool all_args, int max_prop_length);
 
 /* Function */

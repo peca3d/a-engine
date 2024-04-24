@@ -35,7 +35,7 @@
 #include "BKE_global.h"
 #include "BKE_gpencil_legacy.h"
 #include "BKE_grease_pencil.hh"
-#include "BKE_layer.h"
+#include "BKE_layer.hh"
 #include "BKE_lib_id.hh"
 #include "BKE_mask.h"
 #include "BKE_nla.h"
@@ -4029,6 +4029,12 @@ static bool select_anim_channel_keys(bAnimContext *ac, int channel_index, bool e
     return false;
   }
 
+  /* Only FCuves can have their keys selected. */
+  if (ale->datatype != ALE_FCURVE) {
+    ANIM_animdata_freelist(&anim_data);
+    return false;
+  }
+
   fcu = (FCurve *)ale->key_data;
   success = (fcu != nullptr);
 
@@ -4312,7 +4318,7 @@ static void ANIM_OT_channel_view_pick(wmOperatorType *ot)
 }
 
 static const EnumPropertyItem channel_bake_key_options[] = {
-    {BEZT_IPO_BEZ, "BEZIER", 0, "Bezier", "New keys will be beziers"},
+    {BEZT_IPO_BEZ, "BEZIER", 0, "Bézier", "New keys will be Bézier"},
     {BEZT_IPO_LIN, "LIN", 0, "Linear", "New keys will be linear"},
     {BEZT_IPO_CONST, "CONST", 0, "Constant", "New keys will be constant"},
     {0, nullptr, 0, nullptr, nullptr},
@@ -4478,36 +4484,33 @@ static void ANIM_OT_channels_bake(wmOperatorType *ot)
                   "Bake Modifiers into keyframes and delete them after");
 }
 
-/* Find a Graph Editor area and modify the given context to be the window region of it. */
-static bool move_context_to_graph_editor(bContext *C)
+/**
+ *  Find a Graph Editor area and set the context arguments accordingly.
+ */
+static bool context_find_graph_editor(bContext *C,
+                                      wmWindow **r_win,
+                                      ScrArea **r_area,
+                                      ARegion **r_region)
 {
-  bool found_graph_editor = false;
   LISTBASE_FOREACH (wmWindow *, win, &CTX_wm_manager(C)->windows) {
-    bScreen *screen = BKE_workspace_active_screen_get(win->workspace_hook);
+    bScreen *screen = WM_window_get_active_screen(win);
 
     LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
       if (area->spacetype != SPACE_GRAPH) {
         continue;
       }
-      ARegion *window_region = BKE_area_find_region_type(area, RGN_TYPE_WINDOW);
-
-      if (!window_region) {
+      ARegion *region = BKE_area_find_region_type(area, RGN_TYPE_WINDOW);
+      if (!region) {
         continue;
       }
 
-      CTX_wm_window_set(C, win);
-      CTX_wm_screen_set(C, screen);
-      CTX_wm_area_set(C, area);
-      CTX_wm_region_set(C, window_region);
-      found_graph_editor = true;
-      break;
-    }
-
-    if (found_graph_editor) {
-      break;
+      *r_win = win;
+      *r_area = area;
+      *r_region = region;
+      return true;
     }
   }
-  return found_graph_editor;
+  return false;
 }
 
 static void deselect_all_fcurves(bAnimContext *ac, const bool hide)
@@ -4529,13 +4532,70 @@ static void deselect_all_fcurves(bAnimContext *ac, const bool hide)
   ANIM_animdata_freelist(&anim_data);
 }
 
-static rctf calculate_selection_fcurve_bounds_and_unhide(
-    bContext *C,
-    ListBase /* CollectionPointerLink */ *selection,
-    PropertyRNA *prop,
-    char *id_to_prop_path,
-    const int index,
-    const bool whole_array)
+static int count_fcurves_hidden_by_filter(bAnimContext *ac, const blender::Span<FCurve *> fcurves)
+{
+  ListBase anim_data = {nullptr, nullptr};
+  if (ac->sl->spacetype != SPACE_GRAPH) {
+    return 0;
+  }
+  SpaceGraph *sipo = (SpaceGraph *)ac->sl;
+  const eAnimFilter_Flags filter = eAnimFilter_Flags(sipo->ads->filterflag);
+  ANIM_animdata_filter(ac, &anim_data, filter, ac->data, eAnimCont_Types(ac->datatype));
+
+  /* Adding FCurves to a map for quicker lookup times. */
+  blender::Map<FCurve *, bool> filtered_fcurves;
+  LISTBASE_FOREACH (bAnimListElem *, ale, &anim_data) {
+    FCurve *fcu = (FCurve *)ale->key_data;
+    filtered_fcurves.add(fcu, true);
+  }
+
+  int hidden_fcurve_count = fcurves.size();
+  for (FCurve *fcu : fcurves) {
+    if (filtered_fcurves.contains(fcu)) {
+      hidden_fcurve_count--;
+    }
+  }
+  ANIM_animdata_freelist(&anim_data);
+  return hidden_fcurve_count;
+}
+
+static blender::Vector<FCurve *> get_fcurves_of_property(
+    ID *id, PointerRNA *ptr, PropertyRNA *prop, const bool whole_array, const int index)
+{
+  using namespace blender;
+
+  AnimData *anim_data = BKE_animdata_from_id(id);
+  if (anim_data == nullptr) {
+    return Vector<FCurve *>();
+  }
+
+  const std::optional<std::string> path = RNA_path_from_ID_to_property(ptr, prop);
+
+  blender::Vector<FCurve *> fcurves;
+  if (RNA_property_array_check(prop) && whole_array) {
+    const int length = RNA_property_array_length(ptr, prop);
+    for (int i = 0; i < length; i++) {
+      FCurve *fcurve = BKE_animadata_fcurve_find_by_rna_path(
+          anim_data, path->c_str(), i, nullptr, nullptr);
+      if (fcurve != nullptr) {
+        fcurves.append(fcurve);
+      }
+    }
+  }
+  else {
+    FCurve *fcurve = BKE_animadata_fcurve_find_by_rna_path(
+        anim_data, path->c_str(), index, nullptr, nullptr);
+    if (fcurve != nullptr) {
+      fcurves.append(fcurve);
+    }
+  }
+  return fcurves;
+}
+
+static rctf calculate_fcurve_bounds_and_unhide(SpaceLink *space_link,
+                                               Scene *scene,
+                                               ID *id,
+                                               const blender::Span<FCurve *> fcurves)
 {
   rctf bounds;
   bounds.xmin = INFINITY;
@@ -4543,15 +4603,58 @@ static rctf calculate_selection_fcurve_bounds_and_unhide(
   bounds.ymin = INFINITY;
   bounds.ymax = -INFINITY;
 
-  SpaceLink *ge_space_link = CTX_wm_space_data(C);
-  if (ge_space_link->spacetype != SPACE_GRAPH) {
+  if (space_link->spacetype != SPACE_GRAPH) {
     return bounds;
   }
 
-  Scene *scene = CTX_data_scene(C);
+  AnimData *anim_data = BKE_animdata_from_id(id);
+  if (anim_data == nullptr) {
+    return bounds;
+  }
+
   float frame_range[2];
   get_view_range(scene, true, frame_range);
+  float mapped_frame_range[2];
+  mapped_frame_range[0] = BKE_nla_tweakedit_remap(
+      anim_data, frame_range[0], NLATIME_CONVERT_UNMAP);
+  mapped_frame_range[1] = BKE_nla_tweakedit_remap(
+      anim_data, frame_range[1], NLATIME_CONVERT_UNMAP);
+
   const bool include_handles = false;
+
+  for (FCurve *fcurve : fcurves) {
+    fcurve->flag |= (FCURVE_SELECTED | FCURVE_VISIBLE);
+    rctf fcu_bounds;
+    get_normalized_fcurve_bounds(fcurve,
+                                 anim_data,
+                                 space_link,
+                                 scene,
+                                 id,
+                                 include_handles,
+                                 mapped_frame_range,
+                                 &fcu_bounds);
+
+    if (BLI_rctf_is_valid(&fcu_bounds)) {
+      BLI_rctf_union(&bounds, &fcu_bounds);
+    }
+  }
+
+  return bounds;
+}
+
+static rctf calculate_selection_fcurve_bounds(bAnimContext *ac,
+                                              ListBase /* CollectionPointerLink */ *selection,
+                                              PropertyRNA *prop,
+                                              const blender::StringRefNull id_to_prop_path,
+                                              const int index,
+                                              const bool whole_array,
+                                              int *r_filtered_fcurve_count)
+{
+  rctf bounds;
+  bounds.xmin = INFINITY;
+  bounds.xmax = -INFINITY;
+  bounds.ymin = INFINITY;
+  bounds.ymax = -INFINITY;
 
   LISTBASE_FOREACH (CollectionPointerLink *, selected, selection) {
     ID *selected_id = selected->ptr.owner_id;
@@ -4560,9 +4663,9 @@ static rctf calculate_selection_fcurve_bounds_and_unhide(
     }
     PointerRNA resolved_ptr;
     PropertyRNA *resolved_prop;
-    if (id_to_prop_path != nullptr) {
+    if (!id_to_prop_path.is_empty()) {
       const bool resolved = RNA_path_resolve_property(
-          &selected->ptr, id_to_prop_path, &resolved_ptr, &resolved_prop);
+          &selected->ptr, id_to_prop_path.c_str(), &resolved_ptr, &resolved_prop);
       if (!resolved) {
         continue;
       }
@@ -4571,46 +4674,11 @@ static rctf calculate_selection_fcurve_bounds_and_unhide(
       resolved_ptr = selected->ptr;
       resolved_prop = prop;
     }
-    char *path = RNA_path_from_ID_to_property(&resolved_ptr, resolved_prop);
-
-    AnimData *anim_data = BKE_animdata_from_id(selected_id);
-    blender::Vector<FCurve *> fcurves;
-    if (RNA_property_array_check(prop) && whole_array) {
-      const int length = RNA_property_array_length(&selected->ptr, prop);
-      for (int i = 0; i < length; i++) {
-        FCurve *fcurve = BKE_animadata_fcurve_find_by_rna_path(
-            anim_data, path, i, nullptr, nullptr);
-        if (fcurve != nullptr) {
-          fcurves.append(fcurve);
-        }
-      }
-    }
-    else {
-      FCurve *fcurve = BKE_animadata_fcurve_find_by_rna_path(
-          anim_data, path, index, nullptr, nullptr);
-      if (fcurve != nullptr) {
-        fcurves.append(fcurve);
-      }
-    }
-
-    MEM_freeN(path);
-
-    for (FCurve *fcurve : fcurves) {
-      fcurve->flag |= (FCURVE_SELECTED | FCURVE_VISIBLE);
-      rctf fcu_bounds;
-      float mapped_frame_range[2];
-      mapped_frame_range[0] = BKE_nla_tweakedit_remap(
-          anim_data, frame_range[0], NLATIME_CONVERT_UNMAP);
-      mapped_frame_range[1] = BKE_nla_tweakedit_remap(
-          anim_data, frame_range[1], NLATIME_CONVERT_UNMAP);
-      get_normalized_fcurve_bounds(fcurve,
-                                   anim_data,
-                                   ge_space_link,
-                                   scene,
-                                   selected_id,
-                                   include_handles,
-                                   mapped_frame_range,
-                                   &fcu_bounds);
+    blender::Vector<FCurve *> fcurves = get_fcurves_of_property(
+        selected_id, &resolved_ptr, resolved_prop, whole_array, index);
+    *r_filtered_fcurve_count += count_fcurves_hidden_by_filter(ac, fcurves);
+    rctf fcu_bounds = calculate_fcurve_bounds_and_unhide(ac->sl, ac->scene, selected_id, fcurves);
+    if (BLI_rctf_is_valid(&fcu_bounds)) {
       BLI_rctf_union(&bounds, &fcu_bounds);
     }
   }
@@ -4620,72 +4688,117 @@ static rctf calculate_selection_fcurve_bounds_and_unhide(
 
 static int view_curve_in_graph_editor_exec(bContext *C, wmOperator *op)
 {
-  PointerRNA ptr = {nullptr};
-  PropertyRNA *prop = nullptr;
+  PointerRNA button_ptr = {nullptr};
+  PropertyRNA *button_prop = nullptr;
   uiBut *but;
   int index;
 
-  if (!(but = UI_context_active_but_prop_get(C, &ptr, &prop, &index))) {
+  if (!(but = UI_context_active_but_prop_get(C, &button_ptr, &button_prop, &index))) {
     /* Pass event on if no active button found. */
     return (OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH);
   }
 
+  int retval = OPERATOR_FINISHED;
+
   ListBase selection = {nullptr, nullptr};
 
+  struct {
+    wmWindow *win;
+    ScrArea *area;
+    ARegion *region;
+  } wm_context_prev = {nullptr}, wm_context_temp = {nullptr};
+
   bool path_from_id;
-  char *id_to_prop_path;
+  std::optional<std::string> id_to_prop_path;
   const bool selected_list_success = UI_context_copy_to_selected_list(
-      C, &ptr, prop, &selection, &path_from_id, &id_to_prop_path);
+      C, &button_ptr, button_prop, &selection, &path_from_id, &id_to_prop_path);
 
-  if (BLI_listbase_is_empty(&selection) || !selected_list_success) {
-    WM_report(RPT_ERROR, "Nothing selected");
-    BLI_freelistN(&selection);
-    return OPERATOR_CANCELLED;
-  }
-
-  const bool found_graph_editor = move_context_to_graph_editor(C);
-
-  if (!found_graph_editor) {
+  if (!context_find_graph_editor(
+          C, &wm_context_temp.win, &wm_context_temp.area, &wm_context_temp.region))
+  {
     WM_report(RPT_WARNING, "No open Graph Editor window found");
-    return OPERATOR_CANCELLED;
+    retval = OPERATOR_CANCELLED;
   }
+  else {
+    wm_context_prev.win = CTX_wm_window(C);
+    wm_context_prev.area = CTX_wm_area(C);
+    wm_context_prev.region = CTX_wm_region(C);
 
-  bAnimContext ac;
-  if (!ANIM_animdata_get_context(C, &ac)) {
-    /* This might never be called since we are manually setting the Graph Editor just before. */
-    WM_report(RPT_ERROR, "Cannot create the Animation Context");
-    return OPERATOR_CANCELLED;
+    CTX_wm_window_set(C, wm_context_temp.win);
+    CTX_wm_area_set(C, wm_context_temp.area);
+    CTX_wm_region_set(C, wm_context_temp.region);
+
+    bAnimContext ac;
+    if (!ANIM_animdata_get_context(C, &ac)) {
+      /* This might never be called since we are manually setting the Graph Editor just before. */
+      WM_report(RPT_ERROR, "Cannot create the Animation Context");
+      retval = OPERATOR_CANCELLED;
+    }
+    else {
+      const bool isolate = RNA_boolean_get(op->ptr, "isolate");
+      /* The index can be less than 0 e.g. on color properties. */
+      const bool whole_array = RNA_boolean_get(op->ptr, "all") || index < 0;
+
+      deselect_all_fcurves(&ac, isolate);
+
+      rctf bounds;
+      bounds.xmin = INFINITY;
+      bounds.xmax = -INFINITY;
+      bounds.ymin = INFINITY;
+      bounds.ymax = -INFINITY;
+      int filtered_fcurve_count = 0;
+      if (selected_list_success && !BLI_listbase_is_empty(&selection)) {
+        rctf selection_bounds = calculate_selection_fcurve_bounds(&ac,
+                                                                  &selection,
+                                                                  button_prop,
+                                                                  id_to_prop_path.value_or(""),
+                                                                  index,
+                                                                  whole_array,
+                                                                  &filtered_fcurve_count);
+        if (BLI_rctf_is_valid(&selection_bounds)) {
+          BLI_rctf_union(&bounds, &selection_bounds);
+        }
+      }
+
+      /* The object to which the button belongs might not be selected, or selectable. */
+      blender::Vector<FCurve *> button_fcurves = get_fcurves_of_property(
+          button_ptr.owner_id, &button_ptr, button_prop, whole_array, index);
+      filtered_fcurve_count += count_fcurves_hidden_by_filter(&ac, button_fcurves);
+      rctf button_bounds = calculate_fcurve_bounds_and_unhide(
+          ac.sl, ac.scene, button_ptr.owner_id, button_fcurves);
+      if (BLI_rctf_is_valid(&button_bounds)) {
+        BLI_rctf_union(&bounds, &button_bounds);
+      }
+
+      if (filtered_fcurve_count > 0) {
+        WM_report(RPT_WARNING, "One or more F-Curves are not visible due to filter settings");
+      }
+
+      if (!BLI_rctf_is_valid(&bounds)) {
+        WM_report(RPT_ERROR, "F-Curves have no valid size");
+        retval = OPERATOR_CANCELLED;
+      }
+      else {
+        ARegion *region = wm_context_temp.region;
+        ScrArea *area = wm_context_temp.area;
+        add_region_padding(C, region, &bounds);
+
+        const int smooth_viewtx = WM_operator_smooth_viewtx_get(op);
+        UI_view2d_smooth_view(C, region, &bounds, smooth_viewtx);
+
+        /* This ensures the channel list updates. */
+        ED_area_tag_redraw(area);
+      }
+    }
+
+    CTX_wm_window_set(C, wm_context_prev.win);
+    CTX_wm_area_set(C, wm_context_prev.area);
+    CTX_wm_region_set(C, wm_context_prev.region);
   }
-
-  const bool isolate = RNA_boolean_get(op->ptr, "isolate");
-  deselect_all_fcurves(&ac, isolate);
-
-  const bool whole_array = RNA_boolean_get(op->ptr, "all");
-
-  rctf bounds = calculate_selection_fcurve_bounds_and_unhide(
-      C, &selection, prop, id_to_prop_path, index, whole_array);
 
   BLI_freelistN(&selection);
 
-  if (id_to_prop_path != nullptr) {
-    MEM_freeN(id_to_prop_path);
-  }
-
-  if (!BLI_rctf_is_valid(&bounds)) {
-    WM_report(RPT_ERROR, "F-Curves have no valid size");
-    return OPERATOR_CANCELLED;
-  }
-
-  ARegion *region = CTX_wm_region(C);
-  add_region_padding(C, region, &bounds);
-
-  const int smooth_viewtx = WM_operator_smooth_viewtx_get(op);
-  UI_view2d_smooth_view(C, region, &bounds, smooth_viewtx);
-
-  /* This ensures the channel list updates. */
-  ED_area_tag_redraw(CTX_wm_area(C));
-
-  return OPERATOR_FINISHED;
+  return retval;
 }
 
 static void ANIM_OT_view_curve_in_graph_editor(wmOperatorType *ot)

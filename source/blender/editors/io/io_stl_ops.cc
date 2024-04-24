@@ -9,7 +9,10 @@
 #ifdef WITH_IO_STL
 
 #  include "BKE_context.hh"
+#  include "BKE_file_handler.hh"
 #  include "BKE_report.h"
+
+#  include "BLI_string.h"
 
 #  include "WM_api.hh"
 #  include "WM_types.hh"
@@ -29,6 +32,7 @@
 
 #  include "IO_stl.hh"
 #  include "io_stl_ops.hh"
+#  include "io_utils.hh"
 
 static int wm_stl_export_invoke(bContext *C, wmOperator *op, const wmEvent * /*event*/)
 {
@@ -44,7 +48,7 @@ static int wm_stl_export_execute(bContext *C, wmOperator *op)
     BKE_report(op->reports, RPT_ERROR, "No filename given");
     return OPERATOR_CANCELLED;
   }
-  STLExportParams export_params;
+  STLExportParams export_params{};
   RNA_string_get(op->ptr, "filepath", export_params.filepath);
   export_params.forward_axis = eIOAxis(RNA_enum_get(op->ptr, "forward_axis"));
   export_params.up_axis = eIOAxis(RNA_enum_get(op->ptr, "up_axis"));
@@ -54,6 +58,8 @@ static int wm_stl_export_execute(bContext *C, wmOperator *op)
   export_params.use_scene_unit = RNA_boolean_get(op->ptr, "use_scene_unit");
   export_params.ascii_format = RNA_boolean_get(op->ptr, "ascii_format");
   export_params.use_batch = RNA_boolean_get(op->ptr, "use_batch");
+
+  export_params.reports = op->reports;
 
   STL_export(C, &export_params);
 
@@ -107,9 +113,12 @@ static bool wm_stl_export_check(bContext * /*C*/, wmOperator *op)
 {
   char filepath[FILE_MAX];
   bool changed = false;
+  bool use_batch = RNA_boolean_get(op->ptr, "use_batch");
   RNA_string_get(op->ptr, "filepath", filepath);
 
-  if (!BLI_path_extension_check(filepath, ".stl")) {
+  /* Enforce an extension on the filepath unless Batch mode is used. Batch mode
+   * will perform substitutions, including the extension, during its processing. */
+  if (!use_batch && !BLI_path_extension_check(filepath, ".stl")) {
     BLI_path_extension_ensure(filepath, FILE_MAX, ".stl");
     RNA_string_set(op->ptr, "filepath", filepath);
     changed = true;
@@ -175,11 +184,6 @@ void WM_OT_stl_export(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_HIDDEN);
 }
 
-static int wm_stl_import_invoke(bContext *C, wmOperator *op, const wmEvent *event)
-{
-  return WM_operator_filesel(C, op, event);
-}
-
 static int wm_stl_import_exec(bContext *C, wmOperator *op)
 {
   STLImportParams params{};
@@ -190,29 +194,17 @@ static int wm_stl_import_exec(bContext *C, wmOperator *op)
   params.global_scale = RNA_float_get(op->ptr, "global_scale");
   params.use_mesh_validate = RNA_boolean_get(op->ptr, "use_mesh_validate");
 
-  int files_len = RNA_collection_length(op->ptr, "files");
+  params.reports = op->reports;
 
-  if (files_len) {
-    PointerRNA fileptr;
-    PropertyRNA *prop;
-    char dir_only[FILE_MAX], file_only[FILE_MAX];
+  const auto paths = blender::ed::io::paths_from_operator_properties(op->ptr);
 
-    RNA_string_get(op->ptr, "directory", dir_only);
-    prop = RNA_struct_find_property(op->ptr, "files");
-    for (int i = 0; i < files_len; i++) {
-      RNA_property_collection_lookup_int(op->ptr, prop, i, &fileptr);
-      RNA_string_get(&fileptr, "name", file_only);
-      BLI_path_join(params.filepath, sizeof(params.filepath), dir_only, file_only);
-      STL_import(C, &params);
-    }
-  }
-  else if (RNA_struct_property_is_set_ex(op->ptr, "filepath", false)) {
-    RNA_string_get(op->ptr, "filepath", params.filepath);
-    STL_import(C, &params);
-  }
-  else {
+  if (paths.is_empty()) {
     BKE_report(op->reports, RPT_ERROR, "No filepath given");
     return OPERATOR_CANCELLED;
+  }
+  for (const auto &path : paths) {
+    STRNCPY(params.filepath, path.c_str());
+    STL_import(C, &params);
   }
 
   Scene *scene = CTX_data_scene(C);
@@ -237,6 +229,26 @@ static bool wm_stl_import_check(bContext * /*C*/, wmOperator *op)
   return false;
 }
 
+static void ui_stl_import_settings(uiLayout *layout, PointerRNA *ptr)
+{
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
+
+  uiLayout *box = uiLayoutBox(layout);
+  uiLayout *col = uiLayoutColumn(box, false);
+  uiItemR(col, ptr, "global_scale", UI_ITEM_NONE, nullptr, ICON_NONE);
+  uiItemR(col, ptr, "use_scene_unit", UI_ITEM_NONE, nullptr, ICON_NONE);
+  uiItemR(col, ptr, "use_facet_normal", UI_ITEM_NONE, nullptr, ICON_NONE);
+  uiItemR(col, ptr, "forward_axis", UI_ITEM_NONE, IFACE_("Forward Axis"), ICON_NONE);
+  uiItemR(col, ptr, "up_axis", UI_ITEM_NONE, nullptr, ICON_NONE);
+  uiItemR(col, ptr, "use_mesh_validate", UI_ITEM_NONE, nullptr, ICON_NONE);
+}
+
+static void wm_stl_import_draw(bContext * /*C*/, wmOperator *op)
+{
+  ui_stl_import_settings(op->layout, op->ptr);
+}
+
 void WM_OT_stl_import(wmOperatorType *ot)
 {
   PropertyRNA *prop;
@@ -245,11 +257,12 @@ void WM_OT_stl_import(wmOperatorType *ot)
   ot->description = "Import an STL file as an object";
   ot->idname = "WM_OT_stl_import";
 
-  ot->invoke = wm_stl_import_invoke;
+  ot->invoke = blender::ed::io::filesel_drop_import_invoke;
   ot->exec = wm_stl_import_exec;
   ot->poll = WM_operator_winactive;
   ot->check = wm_stl_import_check;
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_PRESET;
+  ot->ui = wm_stl_import_draw;
+  ot->flag = OPTYPE_UNDO | OPTYPE_PRESET;
 
   WM_operator_properties_filesel(ot,
                                  FILE_TYPE_FOLDER,
@@ -283,5 +296,18 @@ void WM_OT_stl_import(wmOperatorType *ot)
   prop = RNA_def_string(ot->srna, "filter_glob", "*.stl", 0, "Extension Filter", "");
   RNA_def_property_flag(prop, PROP_HIDDEN);
 }
+
+namespace blender::ed::io {
+void stl_file_handler_add()
+{
+  auto fh = std::make_unique<blender::bke::FileHandlerType>();
+  STRNCPY(fh->idname, "IO_FH_stl");
+  STRNCPY(fh->import_operator, "WM_OT_stl_import");
+  STRNCPY(fh->label, "STL");
+  STRNCPY(fh->file_extensions_str, ".stl");
+  fh->poll_drop = poll_file_object_drop;
+  bke::file_handler_add(std::move(fh));
+}
+}  // namespace blender::ed::io
 
 #endif /* WITH_IO_STL */

@@ -26,7 +26,7 @@
 #include "GPU_matrix.h"
 
 #include "BKE_context.hh"
-#include "BKE_layer.h"
+#include "BKE_layer.hh"
 #include "BKE_mask.h"
 #include "BKE_modifier.hh"
 #include "BKE_paint.hh"
@@ -239,8 +239,11 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
     /* background mode */
     t->spacetype = SPACE_EMPTY;
   }
-  else if ((region == nullptr) && (area->spacetype == SPACE_VIEW3D)) {
-    /* running in the text editor */
+  else if (((region == nullptr) || (region->regiondata == nullptr)) &&
+           (area->spacetype == SPACE_VIEW3D))
+  {
+    /* Running the operator through the text editor where e.g. `area.type` was
+     * set to 'VIEW_3D' but the viewport was not updated. */
     t->spacetype = SPACE_EMPTY;
   }
   else {
@@ -321,7 +324,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   else if (t->spacetype == SPACE_SEQ && region->regiontype == RGN_TYPE_PREVIEW) {
     t->options |= CTX_SEQUENCER_IMAGE;
 
-    /* Needed for autokeying transforms in preview during playback. */
+    /* Needed for auto-keying transforms in preview during playback. */
     bScreen *animscreen = ED_screen_animation_playing(CTX_wm_manager(C));
     t->animtimer = (animscreen) ? animscreen->animtimer : nullptr;
   }

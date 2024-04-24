@@ -5,7 +5,7 @@
  *
  * Adapted from the Blender Alembic importer implementation. */
 
-#include "usd_reader_xform.h"
+#include "usd_reader_xform.hh"
 
 #include "BKE_constraint.h"
 #include "BKE_lib_id.hh"
@@ -118,7 +118,7 @@ bool USDXformReader::is_root_xform_prim() const
     return false;
   }
 
-  if (prim_.IsInPrototype()) {
+  if (is_in_proto()) {
     /* We don't consider prototypes to be root prims,
      * because we never want to apply global scaling
      * or rotations to the prototypes themselves. */

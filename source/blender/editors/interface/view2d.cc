@@ -36,7 +36,7 @@
 
 #include "WM_api.hh"
 
-#include "BLF_api.h"
+#include "BLF_api.hh"
 
 #include "ED_screen.hh"
 
@@ -179,13 +179,6 @@ static void view2d_masks(View2D *v2d, const rcti *mask_scroll)
       v2d->vert = *mask_scroll;
       v2d->vert.xmax++; /* one pixel extra... was leaving a minor gap... */
       v2d->vert.xmin = v2d->vert.xmax - scroll_width;
-    }
-
-    /* Currently, all regions that have vertical scale handles,
-     * also have the scrubbing area at the top.
-     * So the scroll-bar has to move down a bit. */
-    if (scroll & V2D_SCROLL_VERTICAL_HANDLES) {
-      v2d->vert.ymax -= UI_TIME_SCRUB_MARGIN_Y;
     }
 
     /* horizontal scroller */
@@ -1358,13 +1351,11 @@ void UI_view2d_dot_grid_draw(const View2D *v2d,
     int count_x;
     float start_x;
 
-    /* Count points that fit in viewport minus space for the scroll-bars. */
-    grid_axis_start_and_count(
-        step, v2d->cur.xmin, v2d->cur.xmax - V2D_SCROLL_WIDTH, &start_x, &count_x);
+    /* Count points that fit in viewport. */
+    grid_axis_start_and_count(step, v2d->cur.xmin, v2d->cur.xmax, &start_x, &count_x);
     int count_y;
     float start_y;
-    grid_axis_start_and_count(
-        step, v2d->cur.ymin + V2D_SCROLL_HEIGHT, v2d->cur.ymax, &start_y, &count_y);
+    grid_axis_start_and_count(step, v2d->cur.ymin, v2d->cur.ymax, &start_y, &count_y);
     if (count_x == 0 || count_y == 0) {
       continue;
     }

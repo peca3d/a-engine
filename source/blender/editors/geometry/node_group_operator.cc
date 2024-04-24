@@ -25,7 +25,7 @@
 #include "BKE_customdata.hh"
 #include "BKE_editmesh.hh"
 #include "BKE_geometry_set.hh"
-#include "BKE_layer.h"
+#include "BKE_layer.hh"
 #include "BKE_lib_id.hh"
 #include "BKE_main.hh"
 #include "BKE_material.h"
@@ -85,7 +85,7 @@ static const bNodeTree *get_asset_or_local_node_group(const bContext &C,
 {
   Main &bmain = *CTX_data_main(&C);
   if (bNodeTree *group = reinterpret_cast<bNodeTree *>(
-          WM_operator_properties_id_lookup_from_name_or_session_uuid(&bmain, &ptr, ID_NT)))
+          WM_operator_properties_id_lookup_from_name_or_session_uid(&bmain, &ptr, ID_NT)))
   {
     return group;
   }
@@ -208,6 +208,8 @@ static void store_result_geometry(
     case OB_MESH: {
       Mesh &mesh = *static_cast<Mesh *>(object.data);
 
+      const bool has_shape_keys = mesh.key != nullptr;
+
       if (object.mode == OB_MODE_SCULPT) {
         sculpt_paint::undo::geometry_begin(&object, &op);
       }
@@ -221,14 +223,21 @@ static void store_result_geometry(
         new_mesh->attributes_for_write().remove_anonymous();
 
         BKE_object_material_from_eval_data(&bmain, &object, &new_mesh->id);
-        BKE_mesh_nomain_to_mesh(new_mesh, &mesh, &object);
+        if (object.mode == OB_MODE_EDIT) {
+          EDBM_mesh_make_from_mesh(&object, new_mesh, scene.toolsettings->selectmode, true);
+          BKE_editmesh_looptris_and_normals_calc(mesh.edit_mesh);
+          BKE_id_free(nullptr, new_mesh);
+        }
+        else {
+          BKE_mesh_nomain_to_mesh(new_mesh, &mesh, &object);
+        }
       }
 
-      if (object.mode == OB_MODE_EDIT) {
-        EDBM_mesh_make(&object, scene.toolsettings->selectmode, true);
-        BKE_editmesh_looptris_and_normals_calc(mesh.edit_mesh);
+      if (has_shape_keys && !mesh.key) {
+        BKE_report(op.reports, RPT_WARNING, "Mesh shape key data removed");
       }
-      else if (object.mode == OB_MODE_SCULPT) {
+
+      if (object.mode == OB_MODE_SCULPT) {
         sculpt_paint::undo::geometry_end(&object);
       }
       break;
@@ -310,19 +319,38 @@ static Vector<Object *> gather_supported_objects(const bContext &C,
 {
   Vector<Object *> objects;
   Set<const ID *> unique_object_data;
-  CTX_DATA_BEGIN (&C, Object *, object, selected_objects) {
+
+  auto handle_object = [&](Object *object) {
     if (object->mode != mode) {
-      continue;
+      return;
     }
     if (!unique_object_data.add(static_cast<const ID *>(object->data))) {
-      continue;
+      return;
     }
     if (!object_has_editable_data(bmain, *object)) {
-      continue;
+      return;
     }
     objects.append(object);
+  };
+
+  if (mode == OB_MODE_OBJECT) {
+    CTX_DATA_BEGIN (&C, Object *, object, selected_objects) {
+      handle_object(object);
+    }
+    CTX_DATA_END;
   }
-  CTX_DATA_END;
+  else {
+    Scene *scene = CTX_data_scene(&C);
+    ViewLayer *view_layer = CTX_data_view_layer(&C);
+    View3D *v3d = CTX_wm_view3d(&C);
+    Object *active_object = CTX_data_active_object(&C);
+    if (v3d && active_object) {
+      FOREACH_OBJECT_IN_MODE_BEGIN (scene, view_layer, v3d, active_object->type, mode, ob) {
+        handle_object(ob);
+      }
+      FOREACH_OBJECT_IN_MODE_END;
+    }
+  }
   return objects;
 }
 
@@ -374,6 +402,12 @@ static int run_node_group_exec(bContext *C, wmOperator *op)
       BKE_report(op->reports, RPT_ERROR, "Data-block inputs are unsupported");
       return OPERATOR_CANCELLED;
     }
+  }
+  if (node_tree->interface_outputs().is_empty() ||
+      !STREQ(node_tree->interface_outputs()[0]->socket_type, "NodeSocketGeometry"))
+  {
+    BKE_report(op->reports, RPT_ERROR, "Node group's first output must be a geometry");
+    return OPERATOR_CANCELLED;
   }
 
   IDProperty *properties = replace_inputs_evaluated_data_blocks(*op->properties, *depsgraph);
@@ -904,7 +938,7 @@ static void catalog_assets_draw(const bContext *C, Menu *menu)
   const Set<std::string> builtin_menus = get_builtin_menus(ObjectType(active_object->type),
                                                            eObjectMode(active_object->mode));
 
-  asset_system::AssetLibrary *all_library = ED_assetlist_library_get_once_available(
+  asset_system::AssetLibrary *all_library = asset::list::library_get_once_available(
       asset_system::all_library_reference());
   if (!all_library) {
     return;
@@ -929,7 +963,7 @@ MenuType node_group_operator_assets_menu()
   STRNCPY(type.idname, "GEO_MT_node_operator_catalog_assets");
   type.poll = asset_menu_poll;
   type.draw = catalog_assets_draw;
-  type.listener = asset::asset_reading_region_listen_fn;
+  type.listener = asset::list::asset_reading_region_listen_fn;
   type.flag = MenuTypeFlag::ContextDependent;
   return type;
 }
@@ -1028,7 +1062,7 @@ MenuType node_group_operator_assets_menu_unassigned()
   STRNCPY(type.idname, "GEO_MT_node_operator_unassigned");
   type.poll = asset_menu_poll;
   type.draw = catalog_assets_draw_unassigned;
-  type.listener = asset::asset_reading_region_listen_fn;
+  type.listener = asset::list::asset_reading_region_listen_fn;
   type.flag = MenuTypeFlag::ContextDependent;
   type.description = N_(
       "Tool node group assets not assigned to a catalog.\n"
@@ -1053,7 +1087,7 @@ void ui_template_node_operator_asset_menu_items(uiLayout &layout,
   if (!item) {
     return;
   }
-  asset_system::AssetLibrary *all_library = ED_assetlist_library_get_once_available(
+  asset_system::AssetLibrary *all_library = asset::list::library_get_once_available(
       asset_system::all_library_reference());
   if (!all_library) {
     return;
@@ -1082,7 +1116,7 @@ void ui_template_node_operator_asset_root_items(uiLayout &layout, const bContext
     *tree = build_catalog_tree(C, *active_object);
   }
 
-  asset_system::AssetLibrary *all_library = ED_assetlist_library_get_once_available(
+  asset_system::AssetLibrary *all_library = asset::list::library_get_once_available(
       asset_system::all_library_reference());
   if (!all_library) {
     return;

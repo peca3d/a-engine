@@ -67,11 +67,11 @@
 #include "BKE_gpencil_modifier_legacy.h"
 #include "BKE_idprop.h"
 #include "BKE_image.h"
-#include "BKE_key.h"
-#include "BKE_layer.h"
+#include "BKE_key.hh"
+#include "BKE_layer.hh"
 #include "BKE_lib_query.hh"
 #include "BKE_material.h"
-#include "BKE_mball.h"
+#include "BKE_mball.hh"
 #include "BKE_modifier.hh"
 #include "BKE_node.hh"
 #include "BKE_node_runtime.hh"
@@ -222,8 +222,9 @@ OperationCode bone_target_opcode(ID *target,
                                  const char *component_subdata,
                                  RootPChanMap *root_map)
 {
-  /* Same armature. */
-  if (target == id) {
+  /* Same armature. root_map will be nullptr when building object-level constraints, and in that
+   * case we don't need to check for the common chains. */
+  if (target == id && root_map != nullptr) {
     /* Using "done" here breaks in-chain deps, while using
      * "ready" here breaks most production rigs instead.
      * So, we do a compromise here, and only do this when an
@@ -2489,7 +2490,7 @@ void DepsgraphRelationBuilder::build_object_data_geometry(Object *object)
   /* Special case: modifiers evaluation queries scene for various things like
    * data mask to be used. We add relation here to ensure object is never
    * evaluated prior to Scene's CoW is ready. */
-  OperationKey scene_key(&scene_->id, NodeType::PARAMETERS, OperationCode::SCENE_EVAL);
+  ComponentKey scene_key(&scene_->id, NodeType::SCENE);
   add_relation(scene_key, obdata_ubereval_key, "CoW Relation", RELATION_FLAG_NO_FLUSH);
   /* Relation to the instance, so that instancer can use geometry of this object. */
   add_relation(ComponentKey(&object->id, NodeType::GEOMETRY),
@@ -2657,6 +2658,17 @@ void DepsgraphRelationBuilder::build_object_data_geometry_datablock(ID *obdata)
         ComponentKey textoncurve_key(&cu->textoncurve->id, NodeType::TRANSFORM);
         add_relation(textoncurve_key, obdata_geom_eval_key, "Text on Curve Transform");
         build_object(cu->textoncurve);
+      }
+      /* Special relation to ensure active spline index gets properly updated.
+       *
+       * The active spline index is stored on the Curve data-block, and the curve evaluation might
+       * create a new curve data-block for the result, which does not intrinsically sharing the
+       * active spline index. Hence a special relation is added to ensure the modifier stack is
+       * evaluated when selection changes. */
+      {
+        const OperationKey object_data_select_key(
+            obdata, NodeType::BATCH_CACHE, OperationCode::GEOMETRY_SELECT_UPDATE);
+        add_relation(object_data_select_key, obdata_geom_eval_key, "Active Spline Update");
       }
       break;
     }
@@ -3427,19 +3439,21 @@ void DepsgraphRelationBuilder::build_copy_on_write_relations(IDNode *id_node)
       rel_flag &= ~RELATION_FLAG_NO_FLUSH;
     }
     /* Notes on exceptions:
-     * - Parameters component is where drivers are living. Changing any
-     *   of the (custom) properties in the original datablock (even the
-     *   ones which do not imply other component update) need to make
-     *   sure drivers are properly updated.
-     *   This way, for example, changing ID property will properly poke
-     *   all drivers to be updated.
-     *
      * - View layers have cached array of bases in them, which is not
      *   copied by copy-on-write, and not preserved. PROBABLY it is better
      *   to preserve that cache in copy-on-write, but for the time being
      *   we allow flush to layer collections component which will ensure
      *   that cached array of bases exists and is up-to-date. */
-    if (ELEM(comp_node->type, NodeType::PARAMETERS, NodeType::LAYER_COLLECTIONS)) {
+    if (ELEM(comp_node->type, NodeType::LAYER_COLLECTIONS)) {
+      rel_flag &= ~RELATION_FLAG_NO_FLUSH;
+    }
+    /* Mask evaluation operation is part of parameters, and it needs to be re-evaluated when the
+     * mask is tagged for copy-on-eval.
+     *
+     * TODO(@sergey): This needs to be moved out of here.
+     * In order to do so, moving mask evaluation out of parameters would be helpful and
+     * semantically correct. */
+    if (comp_node->type == NodeType::PARAMETERS && id_type == ID_MSK) {
       rel_flag &= ~RELATION_FLAG_NO_FLUSH;
     }
     /* Compatibility with the legacy tagging: groups are only tagged for Copy-on-Write when their

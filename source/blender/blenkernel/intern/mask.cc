@@ -30,7 +30,7 @@
 
 #include "BKE_animsys.h"
 #include "BKE_curve.hh"
-#include "BKE_idtype.h"
+#include "BKE_idtype.hh"
 
 #include "BKE_anim_data.h"
 #include "BKE_image.h"
@@ -131,7 +131,6 @@ static void mask_blend_write(BlendWriter *writer, ID *id, const void *id_address
 static void mask_blend_read_data(BlendDataReader *reader, ID *id)
 {
   Mask *mask = (Mask *)id;
-  BLO_read_data_address(reader, &mask->adt);
 
   BLO_read_list(reader, &mask->masklayers);
 
@@ -449,8 +448,8 @@ void BKE_mask_point_direction_switch(MaskSplinePoint *point)
   copy_v2_v2(point->bezt.vec[0], point->bezt.vec[2]);
   copy_v2_v2(point->bezt.vec[2], co_tmp);
   /* in this case the flags are unlikely to be different but swap anyway */
-  SWAP(uint8_t, point->bezt.f1, point->bezt.f3);
-  SWAP(uint8_t, point->bezt.h1, point->bezt.h2);
+  std::swap(point->bezt.f1, point->bezt.f3);
+  std::swap(point->bezt.h1, point->bezt.h2);
 
   /* swap UW's */
   if (tot_uw > 1) {
@@ -458,7 +457,7 @@ void BKE_mask_point_direction_switch(MaskSplinePoint *point)
     for (int i = 0; i < tot_uw_half; i++) {
       MaskSplinePointUW *uw_a = &point->uw[i];
       MaskSplinePointUW *uw_b = &point->uw[tot_uw - (i + 1)];
-      SWAP(MaskSplinePointUW, *uw_a, *uw_b);
+      std::swap(*uw_a, *uw_b);
     }
   }
 
@@ -482,7 +481,7 @@ void BKE_mask_spline_direction_switch(MaskLayer *masklay, MaskSpline *spline)
   for (i = 0; i < tot_point_half; i++) {
     MaskSplinePoint *point_a = &spline->points[i];
     MaskSplinePoint *point_b = &spline->points[tot_point - (i + 1)];
-    SWAP(MaskSplinePoint, *point_a, *point_b);
+    std::swap(*point_a, *point_b);
   }
 
   /* correct UW's */
@@ -491,8 +490,8 @@ void BKE_mask_spline_direction_switch(MaskLayer *masklay, MaskSpline *spline)
 
     BKE_mask_point_direction_switch(&spline->points[i]);
 
-    SWAP(MaskSplinePointUW *, spline->points[i].uw, spline->points[i_prev].uw);
-    SWAP(int, spline->points[i].tot_uw, spline->points[i_prev].tot_uw);
+    std::swap(spline->points[i].uw, spline->points[i_prev].uw);
+    std::swap(spline->points[i].tot_uw, spline->points[i_prev].tot_uw);
 
     i_prev = i;
   }
@@ -507,7 +506,7 @@ void BKE_mask_spline_direction_switch(MaskLayer *masklay, MaskSpline *spline)
       for (i = 0; i < tot_point_half; i++) {
         MaskLayerShapeElem *fp_a = &fp_arr[spline_index + (i)];
         MaskLayerShapeElem *fp_b = &fp_arr[spline_index + (tot_point - (i + 1))];
-        SWAP(MaskLayerShapeElem, *fp_a, *fp_b);
+        std::swap(*fp_a, *fp_b);
       }
     }
   }
@@ -851,14 +850,14 @@ MaskSplinePointUW *BKE_mask_point_sort_uw(MaskSplinePoint *point, MaskSplinePoin
 
     if (idx > 0 && point->uw[idx - 1].u > uw->u) {
       while (idx > 0 && point->uw[idx - 1].u > point->uw[idx].u) {
-        SWAP(MaskSplinePointUW, point->uw[idx - 1], point->uw[idx]);
+        std::swap(point->uw[idx - 1], point->uw[idx]);
         idx--;
       }
     }
 
     if (idx < point->tot_uw - 1 && point->uw[idx + 1].u < uw->u) {
       while (idx < point->tot_uw - 1 && point->uw[idx + 1].u < point->uw[idx].u) {
-        SWAP(MaskSplinePointUW, point->uw[idx + 1], point->uw[idx]);
+        std::swap(point->uw[idx + 1], point->uw[idx]);
         idx++;
       }
     }

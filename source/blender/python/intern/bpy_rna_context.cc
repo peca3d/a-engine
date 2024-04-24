@@ -375,7 +375,14 @@ static PyObject *bpy_rna_context_temp_override_exit(BPyContextTempOverride *self
         is_container_set = true;
       }
       else if (self->ctx_temp.win_is_set) {
-        is_container_set = true;
+        if (self->ctx_init.win == CTX_wm_window(C)) {
+          is_container_set = true;
+        }
+        else {
+          /* If the context changed, it's incorrect to attempt to restored nested members,
+           * in this case leave the context as-is, see: #119202. */
+          do_restore = false;
+        }
       }
     }
   }
@@ -393,7 +400,12 @@ static PyObject *bpy_rna_context_temp_override_exit(BPyContextTempOverride *self
         is_container_set = true;
       }
       else if (self->ctx_temp.screen_is_set) {
-        is_container_set = true;
+        if (self->ctx_init.screen == CTX_wm_screen(C)) {
+          is_container_set = true;
+        }
+        else {
+          do_restore = false;
+        }
       }
     }
   }
@@ -413,7 +425,12 @@ static PyObject *bpy_rna_context_temp_override_exit(BPyContextTempOverride *self
         is_container_set = true;
       }
       else if (self->ctx_temp.area_is_set) {
-        is_container_set = true;
+        if (self->ctx_init.area == CTX_wm_area(C)) {
+          is_container_set = true;
+        }
+        else {
+          do_restore = false;
+        }
       }
     }
   }
@@ -427,15 +444,23 @@ static PyObject *bpy_rna_context_temp_override_exit(BPyContextTempOverride *self
       do_restore = false;
     }
 
-    if (self->ctx_init.region_is_set || is_container_set) {
-      CTX_wm_region_set(C, self->ctx_init.region);
-      is_container_set = true;
-    }
-    else if (self->ctx_temp.region_is_set) {
-      is_container_set = true;
+    if (do_restore) {
+      if (self->ctx_init.region_is_set || is_container_set) {
+        CTX_wm_region_set(C, self->ctx_init.region);
+        is_container_set = true;
+      }
+      /* Enable is there is ever data nested within the region.  */
+      else if (false && self->ctx_temp.region_is_set) {
+        if (self->ctx_init.region == CTX_wm_region(C)) {
+          is_container_set = true;
+        }
+        else {
+          do_restore = false;
+        }
+      }
     }
   }
-  UNUSED_VARS(is_container_set);
+  UNUSED_VARS(is_container_set, do_restore);
 
   /* Finished restoring the context. */
 
@@ -542,31 +567,33 @@ static PyObject *bpy_context_temp_override_extract_known_args(const char *const 
   return kwds_parse;
 }
 
-PyDoc_STRVAR(bpy_context_temp_override_doc,
-             ".. method:: temp_override(window, area, region, **keywords)\n"
-             "\n"
-             "   Context manager to temporarily override members in the context.\n"
-             "\n"
-             "   :arg window: Window override or None.\n"
-             "   :type window: :class:`bpy.types.Window`\n"
-             "   :arg screen: Screen override or None.\n"
-             "\n"
-             "      .. note:: Switching to or away from full-screen areas & temporary screens "
-             "isn't supported. Passing in these screens will raise an exception, "
-             "actions that leave the context such screens won't restore the prior screen.\n"
-             "\n"
-             "      .. note:: Changing the screen has wider implications "
-             "than other arguments as it will also change the works-space "
-             "and potentially the scene (when pinned).\n"
-             "\n"
-             "   :type screen: :class:`bpy.types.Screen`\n"
-             "   :arg area: Area override or None.\n"
-             "   :type area: :class:`bpy.types.Area`\n"
-             "   :arg region: Region override or None.\n"
-             "   :type region: :class:`bpy.types.Region`\n"
-             "   :arg keywords: Additional keywords override context members.\n"
-             "   :return: The context manager .\n"
-             "   :rtype: context manager\n");
+PyDoc_STRVAR(
+    /* Wrap. */
+    bpy_context_temp_override_doc,
+    ".. method:: temp_override(window, area, region, **keywords)\n"
+    "\n"
+    "   Context manager to temporarily override members in the context.\n"
+    "\n"
+    "   :arg window: Window override or None.\n"
+    "   :type window: :class:`bpy.types.Window`\n"
+    "   :arg screen: Screen override or None.\n"
+    "\n"
+    "      .. note:: Switching to or away from full-screen areas & temporary screens "
+    "isn't supported. Passing in these screens will raise an exception, "
+    "actions that leave the context such screens won't restore the prior screen.\n"
+    "\n"
+    "      .. note:: Changing the screen has wider implications "
+    "than other arguments as it will also change the works-space "
+    "and potentially the scene (when pinned).\n"
+    "\n"
+    "   :type screen: :class:`bpy.types.Screen`\n"
+    "   :arg area: Area override or None.\n"
+    "   :type area: :class:`bpy.types.Area`\n"
+    "   :arg region: Region override or None.\n"
+    "   :type region: :class:`bpy.types.Region`\n"
+    "   :arg keywords: Additional keywords override context members.\n"
+    "   :return: The context manager .\n"
+    "   :rtype: context manager\n");
 static PyObject *bpy_context_temp_override(PyObject *self, PyObject *args, PyObject *kwds)
 {
   const PointerRNA *context_ptr = pyrna_struct_as_ptr(self, &RNA_Context);

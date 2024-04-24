@@ -951,7 +951,7 @@ class VIEW3D_HT_header(Header):
                 layout.popover(
                     panel="VIEW3D_PT_gpencil_sculpt_automasking",
                     text="",
-                    icon='MOD_MASK',
+                    icon=VIEW3D_HT_header._gpencil_sculpt_automasking_icon(tool_settings.gpencil_sculpt)
                 )
 
         elif object_mode == 'SCULPT':
@@ -977,7 +977,7 @@ class VIEW3D_HT_header(Header):
             layout.popover(
                 panel="VIEW3D_PT_sculpt_automasking",
                 text="",
-                icon='MOD_MASK',
+                icon=VIEW3D_HT_header._sculpt_automasking_icon(tool_settings.sculpt)
             )
 
         elif object_mode == 'VERTEX_PAINT':
@@ -997,7 +997,11 @@ class VIEW3D_HT_header(Header):
             row = layout.row()
             row.ui_units_x = 9
             row.popover(panel="VIEW3D_PT_slots_projectpaint", icon=icon)
-            row.popover(panel="VIEW3D_PT_mask", icon='MOD_MASK', text="")
+            row.popover(
+                panel="VIEW3D_PT_mask",
+                icon=VIEW3D_HT_header._texture_mask_icon(
+                    tool_settings.image_paint),
+                text="")
         else:
             # Transform settings depending on tool header visibility
             VIEW3D_HT_header.draw_xform_template(layout, context)
@@ -1081,6 +1085,34 @@ class VIEW3D_HT_header(Header):
 
         # sub.enabled = shading.type != 'RENDERED'
         sub.popover(panel="VIEW3D_PT_shading", text="")
+
+    @staticmethod
+    def _sculpt_automasking_icon(sculpt):
+        automask_enabled = (sculpt.use_automasking_topology or
+                            sculpt.use_automasking_face_sets or
+                            sculpt.use_automasking_boundary_edges or
+                            sculpt.use_automasking_boundary_face_sets or
+                            sculpt.use_automasking_cavity or
+                            sculpt.use_automasking_cavity_inverted or
+                            sculpt.use_automasking_start_normal or
+                            sculpt.use_automasking_view_normal)
+
+        return "CLIPUV_DEHLT" if automask_enabled else "CLIPUV_HLT"
+
+    @staticmethod
+    def _gpencil_sculpt_automasking_icon(gpencil_sculpt):
+        automask_enabled = (gpencil_sculpt.use_automasking_stroke or
+                            gpencil_sculpt.use_automasking_layer_stroke or
+                            gpencil_sculpt.use_automasking_material_stroke or
+                            gpencil_sculpt.use_automasking_material_active or
+                            gpencil_sculpt.use_automasking_layer_active)
+
+        return "CLIPUV_DEHLT" if automask_enabled else "CLIPUV_HLT"
+
+    @staticmethod
+    def _texture_mask_icon(ipaint):
+        mask_enabled = ipaint.use_stencil_layer or ipaint.use_cavity
+        return "CLIPUV_DEHLT" if mask_enabled else "CLIPUV_HLT"
 
 
 class VIEW3D_MT_editor_menus(Menu):
@@ -2382,7 +2414,7 @@ class VIEW3D_MT_curve_add(Menu):
 
         layout.operator_context = 'INVOKE_REGION_WIN'
 
-        layout.operator("curve.primitive_bezier_curve_add", text="Bezier", icon='CURVE_BEZCURVE')
+        layout.operator("curve.primitive_bezier_curve_add", text="Bézier", icon='CURVE_BEZCURVE')
         layout.operator("curve.primitive_bezier_circle_add", text="Circle", icon='CURVE_BEZCIRCLE')
 
         layout.separator()
@@ -2774,7 +2806,7 @@ class VIEW3D_MT_object_animation(Menu):
         layout = self.layout
 
         layout.operator("anim.keyframe_insert", text="Insert Keyframe")
-        layout.operator("anim.keyframe_insert_menu", text="Insert Keyframe with Keying Set")
+        layout.operator("anim.keyframe_insert_menu", text="Insert Keyframe with Keying Set").always_prompt = True
         layout.operator("anim.keyframe_delete_v3d", text="Delete Keyframes...")
         layout.operator("anim.keyframe_clear_v3d", text="Clear Keyframes...")
         layout.operator("anim.keying_set_active_set", text="Change Keying Set...")
@@ -3039,7 +3071,7 @@ class VIEW3D_MT_object_context_menu(Menu):
         layout.separator()
 
         layout.operator("anim.keyframe_insert", text="Insert Keyframe")
-        layout.operator("anim.keyframe_insert_menu", text="Insert Keyframe with Keying Set")
+        layout.operator("anim.keyframe_insert_menu", text="Insert Keyframe with Keying Set").always_prompt = True
 
         layout.separator()
 
@@ -3152,6 +3184,7 @@ class VIEW3D_MT_object_parent(Menu):
 
 class VIEW3D_MT_object_track(Menu):
     bl_label = "Track"
+    bl_translation_context = i18n_contexts.constraint
 
     def draw(self, _context):
         layout = self.layout
@@ -4158,7 +4191,7 @@ class VIEW3D_MT_pose_context_menu(Menu):
         layout.operator_context = 'INVOKE_REGION_WIN'
 
         layout.operator("anim.keyframe_insert", text="Insert Keyframe")
-        layout.operator("anim.keyframe_insert_menu", text="Insert Keyframe with Keying Set")
+        layout.operator("anim.keyframe_insert_menu", text="Insert Keyframe with Keying Set").always_prompt = True
 
         layout.separator()
 
@@ -4445,6 +4478,7 @@ class VIEW3D_MT_edit_mesh_context_menu(Menu):
 
             col.operator("mesh.mark_sharp")
             col.operator("mesh.mark_sharp", text="Clear Sharp").clear = True
+            col.operator("mesh.set_sharpness_by_angle")
 
             if with_freestyle:
                 col.separator()
@@ -4668,6 +4702,8 @@ class VIEW3D_MT_edit_mesh_edges(Menu):
         props = layout.operator("mesh.mark_sharp", text="Clear Sharp from Vertices")
         props.use_verts = True
         props.clear = True
+
+        layout.operator("mesh.set_sharpness_by_angle")
 
         if with_freestyle:
             layout.separator()
@@ -5805,6 +5841,10 @@ class VIEW3D_MT_edit_greasepencil(Menu):
 
         layout.separator()
 
+        layout.operator_menu_enum("grease_pencil.separate", "mode", text="Separate")
+
+        layout.separator()
+
         layout.menu("GREASE_PENCIL_MT_layer_active", text="Active Layer")
 
         layout.separator()
@@ -5835,6 +5875,7 @@ class VIEW3D_MT_edit_greasepencil_stroke(Menu):
 
         layout.separator()
 
+        layout.menu("GREASE_PENCIL_MT_move_to_layer")
         layout.menu("VIEW3D_MT_grease_pencil_assign_material")
         layout.operator("grease_pencil.set_active_material")
 
@@ -5848,6 +5889,8 @@ class VIEW3D_MT_edit_greasepencil_stroke(Menu):
 
         layout.operator("grease_pencil.set_uniform_thickness")
         layout.operator("grease_pencil.set_uniform_opacity")
+
+        layout.operator_menu_enum("grease_pencil.reorder", text="Reorder", property="direction")
 
 
 class VIEW3D_MT_edit_greasepencil_point(Menu):
@@ -8202,6 +8245,10 @@ class VIEW3D_MT_greasepencil_edit_context_menu(Menu):
 
             col.menu("VIEW3D_MT_mirror", text="Mirror Points")
 
+            col.separator()
+
+            col.operator("grease_pencil.separate", text="Separate").mode = 'SELECTED'
+
             # Removal Operators
             col.separator()
 
@@ -8230,6 +8277,10 @@ class VIEW3D_MT_greasepencil_edit_context_menu(Menu):
             col.separator()
 
             col.menu("VIEW3D_MT_mirror")
+
+            col.separator()
+
+            col.operator("grease_pencil.separate", text="Separate").mode = 'SELECTED'
 
 
 def draw_gpencil_layer_active(context, layout):
@@ -8530,7 +8581,7 @@ class VIEW3D_PT_sculpt_automasking(Panel):
         col.prop(sculpt, "use_automasking_boundary_face_sets", text="Face Sets Boundary")
 
         if sculpt.use_automasking_boundary_edges or sculpt.use_automasking_boundary_face_sets:
-            col.prop(sculpt.brush, "automasking_boundary_edges_propagation_steps")
+            col.prop(sculpt, "automasking_boundary_edges_propagation_steps")
 
         col.separator()
 

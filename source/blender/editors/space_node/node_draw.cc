@@ -38,7 +38,7 @@
 #include "BKE_context.hh"
 #include "BKE_curves.hh"
 #include "BKE_global.h"
-#include "BKE_idtype.h"
+#include "BKE_idtype.hh"
 #include "BKE_lib_id.hh"
 #include "BKE_main.hh"
 #include "BKE_node.hh"
@@ -49,11 +49,11 @@
 #include "BKE_scene.h"
 #include "BKE_type_conversions.hh"
 
-#include "IMB_imbuf.h"
+#include "IMB_imbuf.hh"
 
 #include "DEG_depsgraph.hh"
 
-#include "BLF_api.h"
+#include "BLF_api.hh"
 
 #include "BIF_glutil.hh"
 
@@ -357,7 +357,6 @@ float2 node_from_view(const bNode &node, const float2 &co)
 {
   const float2 node_location = co / UI_SCALE_FAC;
   return bke::nodeFromView(&node, node_location);
-  ;
 }
 
 static bool is_node_panels_supported(const bNode &node)
@@ -998,7 +997,7 @@ static void node_update_hidden(bNode &node, uiBlock &block)
   }
 
   float hiddenrad = HIDDEN_RAD;
-  float tot = MAX2(totin, totout);
+  float tot = std::max(totin, totout);
   if (tot > 4) {
     hiddenrad += 5.0f * float(tot - 4);
   }
@@ -1275,7 +1274,16 @@ static void create_inspection_string_for_generic_value(const bNodeSocket &socket
     ss << fmt::format(TIP_("{} (Integer)"), *static_cast<int *>(socket_value));
   }
   else if (socket_type.is<float>()) {
-    ss << fmt::format(TIP_("{} (Float)"), *static_cast<float *>(socket_value));
+    const float float_value = *static_cast<float *>(socket_value);
+    /* Above that threshold floats can't represent fractions anymore. */
+    if (std::abs(float_value) > (1 << 24)) {
+      /* Use higher precision to display correct integer value instead of one that is rounded to
+       * fewer significant digits. */
+      ss << fmt::format(TIP_("{:.10} (Float)"), float_value);
+    }
+    else {
+      ss << fmt::format(TIP_("{} (Float)"), float_value);
+    }
   }
   else if (socket_type.is<blender::float3>()) {
     const blender::float3 &vector = *static_cast<blender::float3 *>(socket_value);
@@ -1550,9 +1558,9 @@ static bool node_socket_has_tooltip(const bNodeTree &ntree, const bNodeSocket &s
   return false;
 }
 
-static char *node_socket_get_tooltip(const SpaceNode *snode,
-                                     const bNodeTree &ntree,
-                                     const bNodeSocket &socket)
+static std::string node_socket_get_tooltip(const SpaceNode *snode,
+                                           const bNodeTree &ntree,
+                                           const bNodeSocket &socket)
 {
   TreeDrawContext tree_draw_ctx;
   if (snode != nullptr) {
@@ -1601,7 +1609,7 @@ static char *node_socket_get_tooltip(const SpaceNode *snode,
     output << bke::nodeSocketLabel(&socket);
   }
 
-  return BLI_strdup(output.str().c_str());
+  return output.str();
 }
 
 static void node_socket_add_tooltip_in_node_editor(const bNodeTree &ntree,
@@ -2102,7 +2110,7 @@ static void node_draw_panels_background(const bNode &node, uiBlock &block)
   const nodes::NodeDeclaration &decl = *node.declaration();
   const rctf &rct = node.runtime->totr;
   float color_panel[4];
-  UI_GetThemeColorBlend4f(TH_BACK, TH_NODE, 0.2f, color_panel);
+  UI_GetThemeColorShade4fv(TH_NODE, -15, color_panel);
 
   /* True if the last panel is open, draw bottom gap as background. */
   bool is_last_panel_visible = false;
@@ -2301,7 +2309,7 @@ struct NodeErrorsTooltipData {
   Span<geo_log::NodeWarning> warnings;
 };
 
-static char *node_errors_tooltip_fn(bContext * /*C*/, void *argN, const char * /*tip*/)
+static std::string node_errors_tooltip_fn(bContext * /*C*/, void *argN, const char * /*tip*/)
 {
   NodeErrorsTooltipData &data = *(NodeErrorsTooltipData *)argN;
 
@@ -2318,7 +2326,7 @@ static char *node_errors_tooltip_fn(bContext * /*C*/, void *argN, const char * /
   /* Let the tooltip system automatically add the last period. */
   complete_string += data.warnings.last().message;
 
-  return BLI_strdupn(complete_string.c_str(), complete_string.size());
+  return complete_string;
 }
 
 #define NODE_HEADER_ICON_SIZE (0.8f * U.widget_unit)
@@ -2500,7 +2508,7 @@ struct NamedAttributeTooltipArg {
   Map<StringRefNull, geo_log::NamedAttributeUsage> usage_by_attribute;
 };
 
-static char *named_attribute_tooltip(bContext * /*C*/, void *argN, const char * /*tip*/)
+static std::string named_attribute_tooltip(bContext * /*C*/, void *argN, const char * /*tip*/)
 {
   NamedAttributeTooltipArg &arg = *static_cast<NamedAttributeTooltipArg *>(argN);
 
@@ -2519,13 +2527,13 @@ static char *named_attribute_tooltip(bContext * /*C*/, void *argN, const char * 
   std::sort(sorted_used_attribute.begin(),
             sorted_used_attribute.end(),
             [](const NameWithUsage &a, const NameWithUsage &b) {
-              return BLI_strcasecmp_natural(a.name.c_str(), b.name.c_str()) <= 0;
+              return BLI_strcasecmp_natural(a.name.c_str(), b.name.c_str()) < 0;
             });
 
   for (const NameWithUsage &attribute : sorted_used_attribute) {
     const StringRefNull name = attribute.name;
     const geo_log::NamedAttributeUsage usage = attribute.usage;
-    ss << fmt::format(TIP_("  \u2022 \"{}\": "), std::string_view(name));
+    ss << fmt::format(TIP_("  \u2022 \"{}\": "), name);
     Vector<std::string> usages;
     if ((usage & geo_log::NamedAttributeUsage::Read) != geo_log::NamedAttributeUsage::None) {
       usages.append(TIP_("read"));
@@ -2547,7 +2555,7 @@ static char *named_attribute_tooltip(bContext * /*C*/, void *argN, const char * 
   ss << "\n";
   ss << TIP_(
       "Attributes with these names used within the group may conflict with existing attributes");
-  return BLI_strdup(ss.str().c_str());
+  return ss.str();
 }
 
 static NodeExtraInfoRow row_from_used_named_attribute(
@@ -2614,6 +2622,14 @@ static Vector<NodeExtraInfoRow> node_get_extra_info(const bContext &C,
   if (node.typeinfo->get_extra_info) {
     nodes::NodeExtraInfoParams params{rows, node, C};
     node.typeinfo->get_extra_info(params);
+  }
+
+  if (node.typeinfo->deprecation_notice) {
+    NodeExtraInfoRow row;
+    row.text = IFACE_("Deprecated");
+    row.icon = ICON_INFO;
+    row.tooltip = TIP_(node.typeinfo->deprecation_notice);
+    rows.append(std::move(row));
   }
 
   if (!(snode.edittree->type == NTREE_GEOMETRY)) {

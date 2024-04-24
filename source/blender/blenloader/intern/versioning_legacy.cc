@@ -6,6 +6,7 @@
  * \ingroup blenloader
  */
 
+#include <algorithm>
 #include <climits>
 
 #ifndef WIN32
@@ -56,7 +57,7 @@
 #include "BKE_armature.hh"
 #include "BKE_constraint.h"
 #include "BKE_customdata.hh"
-#include "BKE_deform.h"
+#include "BKE_deform.hh"
 #include "BKE_fcurve.h"
 #include "BKE_lattice.hh"
 #include "BKE_main.hh" /* for Main */
@@ -1323,8 +1324,8 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
           SubsurfModifierData *smd = (SubsurfModifierData *)BKE_modifier_new(
               eModifierType_Subsurf);
 
-          smd->levels = MAX2(1, mesh->subdiv);
-          smd->renderLevels = MAX2(1, mesh->subdivr);
+          smd->levels = std::max<short>(1, mesh->subdiv);
+          smd->renderLevels = std::max<short>(1, mesh->subdivr);
           smd->subdivType = mesh->subsurftype;
 
           smd->modifier.mode = 0;

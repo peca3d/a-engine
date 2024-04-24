@@ -1,11 +1,11 @@
 
 msgid ""
 msgstr ""
-"Project-Id-Version: Blender 4.1.0 Alpha (b'acbb91b192da')\n"
+"Project-Id-Version: Blender 4.1.0 Release Candidate (b'64bfe491645f')\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-01-15 10:52:30\n"
-"PO-Revision-Date: 2023-12-17 02:53+0000\n"
-"Last-Translator: Jad Musallam <rubber.444332@gmail.com>\n"
+"POT-Creation-Date: 2020-01-01 00:00+0000\n"
+"PO-Revision-Date: 2024-03-01 16:11+0000\n"
+"Last-Translator: Alessandro Vecchio <alessandrovecchio1907@gmail.com>\n"
 "Language-Team: Italian <https://translate.blender.org/projects/blender-ui/ui/it/>\n"
 "Language: it\n"
 "MIME-Version: 1.0\n"
@@ -411,6 +411,10 @@ msgid "glTFpack file path"
 msgstr "Percorso file glTFpack"
 
 
+msgid "Path to gltfpack binary"
+msgstr "Percorso del binario gltfpack"
+
+
 msgid "Displays glTF Material Output node in Shader Editor (Menu Add > Output)"
 msgstr "Visualizza il nodo Output Materiale glTF nell'Editor Ombreggiatori (Menu Aggiungi > Output)"
 
@@ -649,6 +653,14 @@ msgstr "Impostazioni Percorso del Movimento"
 
 msgid "Motion Path settings for animation visualization"
 msgstr "Impostazioni del Percorso di Movimento per la visualizzazione dell'animazione"
+
+
+msgid "Bake to active Camera"
+msgstr "Bake sulla Camera Attiva"
+
+
+msgid "Motion path points will be baked into the camera space of the active camera. This means they will only look right when looking through that camera. Switching cameras using markers is not supported"
+msgstr "I punti del percorso di movimento verranno inseriti nello spazio della camera attiva. Ciò significa che sembreranno giusti solo quando guarderanno attraverso quella camera. Il passaggio da una camera all'altra utilizzando i marcatori non è supportato"
 
 
 msgid "Bake Location"
@@ -1103,6 +1115,14 @@ msgid "Catalog Path"
 msgstr "Percorso del Catalogo"
 
 
+msgid "User Asset Libraries"
+msgstr "Librerie Risorse Utente"
+
+
+msgid "Collection of user asset libraries"
+msgstr "Raccolta di librerie risorse utente"
+
+
 msgid "Asset Library Reference"
 msgstr "Riferimento alla Libreria degli Assets"
 
@@ -1475,8 +1495,8 @@ msgid "ID Name"
 msgstr "Nome ID"
 
 
-msgid "If this is set, the asset gets a custom ID, otherwise it takes the name of the class used to define the menu (for example, if the class name is \"OBJECT_AST_hello\", and bl_idname is not set by the script, then bl_idname = \"OBJECT_AST_hello\")"
-msgstr "Se impostato, la risorsa ottiene un ID personalizzato, altrimenti prende il nome della classe utilizzata per definire il menu (ad esempio, se il nome della classe è \"OBJECT_AST_ciao\" e bl_idname non è impostato dallo script, allora bl_idname = \"OBJECT_AST_ciao\")"
+msgid "If this is set, the asset gets a custom ID, otherwise it takes the name of the class used to define the asset (for example, if the class name is \"OBJECT_AST_hello\", and bl_idname is not set by the script, then bl_idname = \"OBJECT_AST_hello\")"
+msgstr "Se impostato, la risorsa ottiene un ID personalizzato, altrimenti prende il nome della classe utilizzata per definire la risorsa (ad esempio, se il nome della classe è \"OBJECT_AST_hello\" e bl_idname non è impostato dallo script, allora bl_idname = \"OBJECT_AST_hello\")"
 
 
 msgid "Options"
@@ -1489,6 +1509,10 @@ msgstr "Opzioni per questo tipo di scaffale delle risorse"
 
 msgid "No Asset Dragging"
 msgstr "Nessun Trascinamento di Risorse"
+
+
+msgid "Disable the default asset dragging on drag events. Useful for implementing custom dragging via custom key-map items"
+msgstr "Disabilita il trascinamento predefinito delle risorse negli eventi di trascinamento. Utile per implementare il trascinamento personalizzato tramite elementi della key-map personalizzata"
 
 
 msgid "Space Type"
@@ -1675,16 +1699,32 @@ msgid "Face"
 msgstr "Faccia"
 
 
+msgid "Attribute on mesh faces"
+msgstr "Attributo sulle facce mesh"
+
+
 msgid "Face Corner"
 msgstr "Angolo della Faccia"
+
+
+msgid "Attribute on mesh face corner"
+msgstr "Attributo sull'angolo della faccia mesh"
 
 
 msgid "Spline"
 msgstr "Spline"
 
 
+msgid "Attribute on spline"
+msgstr "Attributo sulla spline"
+
+
 msgid "Instance"
 msgstr "Istanza"
+
+
+msgid "Attribute on instance"
+msgstr "Attributo sull'istanza"
 
 
 msgid "Layer"
@@ -1699,6 +1739,18 @@ msgid "Is Internal"
 msgstr "È Interno"
 
 
+msgid "The attribute is meant for internal use by Blender"
+msgstr "L'attributo è pensato per uso interno da Blender"
+
+
+msgid "Is Required"
+msgstr "È Obbligatorio"
+
+
+msgid "Whether the attribute can be removed or renamed"
+msgstr "Se l'attributo può essere rimosso o rinominato"
+
+
 msgid "Name of the Attribute"
 msgstr "Nome dell'Attributo"
 
@@ -1707,48 +1759,112 @@ msgid "Bool Attribute"
 msgstr "Attributo Bool"
 
 
+msgid "Geometry attribute that stores booleans"
+msgstr "Attributo geometrico che memorizza valori booleani"
+
+
 msgid "Byte Color Attribute"
 msgstr "Attributo Colore Byte"
+
+
+msgid "Geometry attribute that stores RGBA colors as positive integer values using 8-bits per channel"
+msgstr "Attributo geometrico che memorizza i colori RGBA come valori interi positivi utilizzando 8 bit per canale"
 
 
 msgid "8-bit Integer Attribute"
 msgstr "Attributo Intero a 8 bit"
 
 
+msgid "Geometry attribute that stores 8-bit integers"
+msgstr "Attributo geometrico che memorizza numeri interi a 8 bit"
+
+
 msgid "Float2 Attribute"
 msgstr "Attributo Float2"
+
+
+msgid "Geometry attribute that stores floating-point 2D vectors"
+msgstr "Attributo geometrico che memorizza vettori 2D a virgola mobile"
 
 
 msgid "Float Attribute"
 msgstr "Attributo Mobile"
 
 
+msgid "Geometry attribute that stores floating-point values"
+msgstr "Attributo geometrico che memorizza valori a virgola mobile"
+
+
 msgid "Float Color Attribute"
 msgstr "Attributo Colore Mobile"
+
+
+msgid "Geometry attribute that stores RGBA colors as floating-point values using 32-bits per channel"
+msgstr "Attributo geometrico che memorizza i colori RGBA come valori a virgola mobile utilizzando 32 bit per canale"
+
+
+msgid "Float Vector Attribute"
+msgstr "Attributo Vettoriale a virgola Mobile"
+
+
+msgid "Geometry attribute that stores floating-point 3D vectors"
+msgstr "Attributo geometrico che memorizza vettori 3D a virgola mobile"
 
 
 msgid "2D Integer Vector Attribute"
 msgstr "Attributo del Vettore Intero 2D"
 
 
+msgid "Geometry attribute that stores 2D integer vectors"
+msgstr "Attributo geometrico che memorizza vettori 2D a numeri interi"
+
+
 msgid "Integer Attribute"
 msgstr "Attributo Intero"
+
+
+msgid "Geometry attribute that stores integer values"
+msgstr "Attributo geometrico che memorizza valori interi"
 
 
 msgid "Quaternion Attribute"
 msgstr "Attributo Quaternione"
 
 
+msgid "Geometry attribute that stores rotation"
+msgstr "Attributo geometrico che memorizza la rotazione"
+
+
 msgid "String Attribute"
 msgstr "Attributo Stringa"
+
+
+msgid "Geometry attribute that stores strings"
+msgstr "Attributo geometrico che memorizza stringhe"
 
 
 msgid "Attribute Group"
 msgstr "Gruppo di Attributi"
 
 
+msgid "Group of geometry attributes"
+msgstr "Gruppo di attributi geometrici"
+
+
+msgid "Active Attribute"
+msgstr "Attributo Attivo"
+
+
+msgid "Active attribute"
+msgstr "Attributo attivo"
+
+
 msgid "Active Color"
 msgstr "Colore Attivo"
+
+
+msgid "Active color attribute for display and editing"
+msgstr "Attributo di colore attivo per la visualizzazione e modifica"
 
 
 msgid "Active Color Index"
@@ -2003,12 +2119,8 @@ msgid "Use the active camera's position to cast rays"
 msgstr "Utilizza la posizione della telecamera attiva per proiettare raggi"
 
 
-msgid "Bezier Curve Point"
-msgstr "Punto Curva Bezier"
-
-
-msgid "Bezier curve point with two handles"
-msgstr "Punto della curva Bezier con due maniglie"
+msgid "Bézier Curve Point"
+msgstr "Punto Curva Bézier"
 
 
 msgid "Control Point"
@@ -2189,14 +2301,6 @@ msgstr "Matita"
 
 msgid "Grease Pencil data-blocks"
 msgstr "Blocchi-dati Greace Pencil"
-
-
-msgid "Grease Pencil v3"
-msgstr "Grease Pencil v3"
-
-
-msgid "Grease Pencil v3 data-blocks"
-msgstr "Blocchi-dati Greace Pencil v3"
 
 
 msgid "Hair Curves"
@@ -3252,17 +3356,9 @@ msgid "Ease In"
 msgstr "Sollievo In"
 
 
-msgid "Length of first Bezier Handle (for B-Bones only)"
-msgstr "Lunghezza della prima Maniglia Bezier (solo per Ossa-Bezier)"
-
-
 msgctxt "Armature"
 msgid "Ease Out"
 msgstr "Sollievo Out"
-
-
-msgid "Length of second Bezier Handle (for B-Bones only)"
-msgstr "Lunghezza della seconda Maniglia Bezier (solo per Ossa-Bezier)"
 
 
 msgid "B-Bone End Handle Type"
@@ -3832,18 +3928,6 @@ msgid "Curve used for the strength"
 msgstr "Curva usata per la forza"
 
 
-msgid "Direction"
-msgstr "Direzione"
-
-
-msgid "Add effect of brush"
-msgstr "Aggiunge l'effetto del pennello"
-
-
-msgid "Subtract effect of brush"
-msgstr "Sottrae l'effetto del pennello"
-
-
 msgid "Dissolve"
 msgstr "Dissolvi"
 
@@ -3870,6 +3954,10 @@ msgstr "Influisce sullo Spessore del Tratto"
 
 msgid "Closure Size"
 msgstr "Dimensione della Chiusura"
+
+
+msgid "Direction"
+msgstr "Direzione"
 
 
 msgid "Direction of the fill"
@@ -5697,10 +5785,6 @@ msgid "Floor"
 msgstr "Pavimento"
 
 
-msgid "Use position (and optionally rotation) of target to define a 'wall' or 'floor' that the owner can not cross"
-msgstr "Usa la posizione (e opzionalmente la rotazione) dell'obiettivo per definire una 'parete' che il destinatario non può superare"
-
-
 msgid "Follow Path"
 msgstr "Segui Percorso"
 
@@ -6337,6 +6421,7 @@ msgid "How the footage fits in the camera frame"
 msgstr "Come il filmato originale è adattato al fotogramma della camera"
 
 
+msgctxt "MovieClip"
 msgid "Track"
 msgstr "Traccia"
 
@@ -7349,10 +7434,6 @@ msgid "Handle Type"
 msgstr "Tipo Maniglia"
 
 
-msgid "Curve interpolation at this point: Bezier or vector"
-msgstr "Interpolazione curva in questo punto: Bezier o vettore"
-
-
 msgid "Auto Handle"
 msgstr "Maniglia Automatica"
 
@@ -7447,10 +7528,6 @@ msgstr "Tipo di curva da usare per i nuovi tratti"
 
 msgid "Poly"
 msgstr "Polilinea"
-
-
-msgid "Bezier"
-msgstr "Bezier"
 
 
 msgid "Depth"
@@ -12789,6 +12866,10 @@ msgid "Font"
 msgstr "Carattere"
 
 
+msgid "Grease Pencil v3"
+msgstr "Grease Pencil v3"
+
+
 msgid "Key"
 msgstr "Chiave"
 
@@ -13156,6 +13237,14 @@ msgstr "Sottrae Colore"
 
 msgid "Color of cursor when subtracting"
 msgstr "Colore del cursore quando sottrae"
+
+
+msgid "Add effect of brush"
+msgstr "Aggiunge l'effetto del pennello"
+
+
+msgid "Subtract effect of brush"
+msgstr "Sottrae l'effetto del pennello"
 
 
 msgid "Falloff Angle"
@@ -14542,10 +14631,6 @@ msgid "Edit Grease Pencil strokes instead of viewport data"
 msgstr "Modifica i tratti Matita anziché i dati della vista"
 
 
-msgid "Grease Pencil data-block"
-msgstr "Blocco-dati Matita"
-
-
 msgid "Image data-block referencing an external or packed image"
 msgstr "Blocco-dati Immagine che referenzia un'immagine esterna o incorporata"
 
@@ -15514,6 +15599,10 @@ msgstr "Crea immagini proxy in una directory personalizzata (la definita è la p
 
 msgid "Grease Pencil Data"
 msgstr "Dati Matita"
+
+
+msgid "Grease Pencil data-block"
+msgstr "Blocco-dati Matita"
 
 
 msgid "Interface"
@@ -17165,10 +17254,6 @@ msgstr "Impostazioni Strumento"
 
 msgid "Unit Settings"
 msgstr "Imposta Unità"
-
-
-msgid "Audio Muted"
-msgstr "Audio Disattivato"
 
 
 msgid "Global Gravity"
@@ -19812,10 +19897,6 @@ msgid "KeyMap Items"
 msgstr "Elementi Mappa Tasti"
 
 
-msgid "Bezier curve point with two handles defining a Keyframe on an F-Curve"
-msgstr "Punto di curvatura Bezier con due manici definizione di un fotogramma chiave su un Curva-F"
-
-
 msgid "Automatic Easing"
 msgstr "Raccordo Automatico"
 
@@ -19862,11 +19943,6 @@ msgstr "No interpolazione, il valore di A resta immutato fino a B"
 
 msgid "Straight-line interpolation between A and B (i.e. no ease in/out)"
 msgstr "Interpolazione a linea retta fra A e B (nessun raccordo in entrata/uscita)"
-
-
-msgctxt "Action"
-msgid "Bezier"
-msgstr "Bezier"
 
 
 msgid "Smooth interpolation between A and B, with some control over curve shape"
@@ -20313,10 +20389,6 @@ msgid "2D Transform"
 msgstr "Trasformazione 2D"
 
 
-msgid "Bezier Curve"
-msgstr "Curva Bezier"
-
-
 msgid "Guiding Lines"
 msgstr "Linee Guida"
 
@@ -20759,6 +20831,10 @@ msgid "Rotation Track Specials"
 msgstr "Speciali Rotazione Traccia"
 
 
+msgid "Track"
+msgstr "Traccia"
+
+
 msgid "Clean Up"
 msgstr "Ripulisci"
 
@@ -20838,10 +20914,6 @@ msgstr "Matematica"
 
 msgid "Primitives"
 msgstr "Primitive"
-
-
-msgid "Tracking"
-msgstr "Tracciamento"
 
 
 msgid "Layout"
@@ -23678,14 +23750,6 @@ msgid "Object To"
 msgstr "Oggetto A"
 
 
-msgid "UV Layer"
-msgstr "Livello UV"
-
-
-msgid "UV Layer name"
-msgstr "Nome del livello UV"
-
-
 msgid "WeightVG Edit Modifier"
 msgstr "Modificatore WeightVG Edit"
 
@@ -25940,6 +26004,10 @@ msgid "Pixelate"
 msgstr "Squadrettatura"
 
 
+msgid "Pixel Size"
+msgstr "Dimensione Pixel"
+
+
 msgid "Alpha Convert"
 msgstr "Conversione Alfa"
 
@@ -26140,6 +26208,10 @@ msgid "Compare"
 msgstr "Compara"
 
 
+msgid "Menu"
+msgstr "Menu"
+
+
 msgid "Dot Product"
 msgstr "Prodotto Scalare"
 
@@ -26206,6 +26278,10 @@ msgstr "Info Oggetto"
 
 msgid "Z Up"
 msgstr "Z In Alto"
+
+
+msgid "Sort Elements"
+msgstr "Ordina Elementi"
 
 
 msgid "Selection"
@@ -30035,15 +30111,6 @@ msgid "Toggle the selection"
 msgstr "Cambia la selezionabilità"
 
 
-msgctxt "Operator"
-msgid "Add Bezier Circle"
-msgstr "Aggiunge Cerchio Bezier"
-
-
-msgid "Construct a Bezier Circle"
-msgstr "Crea un Cerchio Bezier"
-
-
 msgid "Align the new object to the view"
 msgstr "Allinea il nuovo oggetto alla vista"
 
@@ -30058,15 +30125,6 @@ msgstr "Posizione per il nuovo oggetto aggiunto"
 
 msgid "Rotation for the newly added object"
 msgstr "Rotazione per il nuovo oggetto aggiunto"
-
-
-msgctxt "Operator"
-msgid "Add Bezier"
-msgstr "Aggiunge Bezier"
-
-
-msgid "Construct a Bezier Curve"
-msgstr "Crea una Curva Bezier"
 
 
 msgctxt "Operator"
@@ -30248,10 +30306,6 @@ msgstr "Imposta il tipo della spline attiva"
 
 msgid "Handles"
 msgstr "Maniglie"
-
-
-msgid "Use handles when converting bezier curves into polygons"
-msgstr "Usa le maniglie quando converte le curve di Bezier in poligoni"
 
 
 msgctxt "Operator"
@@ -31465,10 +31519,6 @@ msgid "Animation path"
 msgstr "Percorso animazione"
 
 
-msgid "Smooth Bezier curve"
-msgstr "Smussa curva Bezier"
-
-
 msgid "Polygon Curve"
 msgstr "Curva Poligonale"
 
@@ -32238,6 +32288,10 @@ msgstr "Dispone il pennello nel modo morbido per la durata del tratto"
 
 msgid "Flat"
 msgstr "Piano"
+
+
+msgid "By Material"
+msgstr "Per Materiale"
 
 
 msgctxt "Operator"
@@ -34634,10 +34688,6 @@ msgid "Separate selected geometry into a new mesh"
 msgstr "Separa la geometria selezionata in una nuova mesh"
 
 
-msgid "By Material"
-msgstr "Per Materiale"
-
-
 msgid "By Loose Parts"
 msgstr "Per Parti Slegate"
 
@@ -35828,6 +35878,10 @@ msgid "Bake image textures of selected objects"
 msgstr "Precalcola immagini texture degli oggetti selezionati"
 
 
+msgid "UV Layer"
+msgstr "Livello UV"
+
+
 msgctxt "Operator"
 msgid "Add Camera"
 msgstr "Aggiungi Camera"
@@ -36880,14 +36934,6 @@ msgid "Name filter using '*', '?' and '[abc]' unix style wildcards"
 msgstr "Filtra il nome usando i caratteri jolly stile unix '*', '?' e '[abc]'"
 
 
-msgid "Render and display faces uniform, using Face Normals"
-msgstr "Renderizza e mostra le facce uniformi, usando le normali delle facce"
-
-
-msgid "Render and display faces smooth, using interpolated Vertex Normals"
-msgstr "Renderizza e mostra le facce levigate, usando l'interpolazione delle normali dei vertici"
-
-
 msgctxt "Operator"
 msgid "Add Shape Key"
 msgstr "Agg. Chiave Forma"
@@ -36908,6 +36954,10 @@ msgstr "Pulisci Chiavi Forma"
 
 msgid "Clear weights for all shape keys"
 msgstr "Cancella pesi per tutte le chiavi forma"
+
+
+msgid "Lock action to execute on vertex groups"
+msgstr "Blocca l'azione da eseguire sui gruppi vertici"
 
 
 msgctxt "Operator"
@@ -37227,10 +37277,6 @@ msgstr "Numero massimo di pesi di deformazione"
 msgctxt "Operator"
 msgid "Change the Lock On Vertex Groups"
 msgstr "Cambia il Blocco Sui Gruppi Vertici"
-
-
-msgid "Lock action to execute on vertex groups"
-msgstr "Blocca l'azione da eseguire sui gruppi vertici"
 
 
 msgid "Lock all vertex groups"
@@ -38936,6 +38982,10 @@ msgid "Copy settings from previous version"
 msgstr "Copia le impostazioni dalla versione precedente"
 
 
+msgid "URL"
+msgstr "URL"
+
+
 msgctxt "Operator"
 msgid "Activate Keyconfig"
 msgstr "Attiva configurazione tasti"
@@ -39127,10 +39177,6 @@ msgstr "Usa la vista 3D corrente per il rendering, altrimenti usa il settaggio d
 
 msgid "Write Image"
 msgstr "Scrivi Immagine"
-
-
-msgid "Save rendered the image to the output path (used only when animation is disabled)"
-msgstr "Salva rendered the image sul percorso di output (usato solo quando l'animazione è disabilitata)"
 
 
 msgctxt "Operator"
@@ -43742,10 +43788,6 @@ msgid "Generate system information, saved into a text file"
 msgstr "Genera le informazioni di sistema, salvate in un file di testo"
 
 
-msgid "URL"
-msgstr "URL"
-
-
 msgid "URL to open"
 msgstr "URL da aprire"
 
@@ -44178,11 +44220,6 @@ msgstr "Risolvi"
 
 msgid "Transforms"
 msgstr "Trasformazioni"
-
-
-msgctxt "MovieClip"
-msgid "Scene Setup"
-msgstr "Impostazioni Scena"
 
 
 msgid "Color Presets"
@@ -44782,10 +44819,6 @@ msgstr "Colori Icone"
 
 msgid "Styles"
 msgstr "Stili"
-
-
-msgid "Menu"
-msgstr "Menu"
 
 
 msgid "Menu Item"
@@ -46178,16 +46211,8 @@ msgid "Auto Keyframe Insert Available"
 msgstr "Auto Inserisci Fotogrammi Chiave Disponibile"
 
 
-msgid "Automatic keyframe insertion in available F-Curves"
-msgstr "Inserimento automatico del fotogramma chiave nelle Curve-F disponibili"
-
-
 msgid "Keyframe Insert Needed"
 msgstr "Necessario inserimento di fotogramma"
-
-
-msgid "Keyframe insertion only when keyframe needed"
-msgstr "Inserisce fotogramma chiave solo quando è necessario"
 
 
 msgid "Allow Negative Frames"
@@ -46312,10 +46337,6 @@ msgstr "Cartella predefinita dove cercare i suoni"
 
 msgid "Temporary Directory"
 msgstr "Cartella Temporanea"
-
-
-msgid "The directory for storing temporary save files"
-msgstr "Cartella di salvataggio per i file temporanei"
 
 
 msgid "The default directory to search for textures"
@@ -48150,10 +48171,6 @@ msgid "Vertical aspect ratio - for anamorphic or non-square pixel output"
 msgstr "Proporzione verticale - per produrre pixel non-quadrati o anamorfici"
 
 
-msgid "Pixel Size"
-msgstr "Dimensione Pixel"
-
-
 msgid "Pixel size for viewport rendering"
 msgstr "Dimensione pixel per il rendering nella vista"
 
@@ -49878,11 +49895,6 @@ msgid "Mass Vertex Group"
 msgstr "Gruppo Vertici Massa"
 
 
-msgctxt "MovieClip"
-msgid "Track"
-msgstr "Traccia"
-
-
 msgid "2D Cursor Location"
 msgstr "Posizione Cursore 2D"
 
@@ -50291,10 +50303,6 @@ msgstr "Mostra il cursore 2D"
 
 msgid "Show Handles"
 msgstr "Mostra Maniglie"
-
-
-msgid "Show handles of Bezier control points"
-msgstr "Mostra maniglie dei punti di controllo Bezier"
 
 
 msgid "Auto Normalization"
@@ -51009,10 +51017,6 @@ msgid "Continuously unwrap the selected UV island while transforming pinned vert
 msgstr "Esegue la scucitura/sviluppo delle isole UV selezionate mentre si trasformano i vertici appuntati"
 
 
-msgid "Bezier Points"
-msgstr "Punti Bezier"
-
-
 msgid "Character Index"
 msgstr "Indice carattere"
 
@@ -51053,10 +51057,6 @@ msgid "Radius Interpolation"
 msgstr "Interpolazione Raggio"
 
 
-msgid "The type of radius interpolation for Bezier curves"
-msgstr "Tipo di interpolazione del raggio per le curve Bezier"
-
-
 msgid "Curve or Surface subdivisions per segment"
 msgstr "Suddivisioni per segmento della Curva o della Superficie"
 
@@ -51067,18 +51067,6 @@ msgstr "Segmenti di suddivisioni della superficie"
 
 msgid "Tilt Interpolation"
 msgstr "Interpolazione Inclinazione"
-
-
-msgid "The type of tilt interpolation for 3D, Bezier curves"
-msgstr "Il tipo di interpolazione Inclinazione perr le curve Bezier 3D"
-
-
-msgid "Bezier U"
-msgstr "Bezier U"
-
-
-msgid "Bezier V"
-msgstr "Bezier V"
 
 
 msgid "Make this curve or surface a closed loop in the U direction"
@@ -51095,10 +51083,6 @@ msgstr "Punto finale U"
 
 msgid "Endpoint V"
 msgstr "Punto finale V"
-
-
-msgid "Spline Bezier Points"
-msgstr "Punti Bezier Spline"
 
 
 msgid "NURBS weight"
@@ -51119,10 +51103,6 @@ msgstr "Uscita Stereo"
 
 msgid "Stereo Mode"
 msgstr "Modalità Stereo"
-
-
-msgid "Lights user to display objects in solid draw mode"
-msgstr "Luci usate per mostrare gli oggetti in modalità disegno Solido"
 
 
 msgid "Map X and Y coordinates directly"
@@ -53761,6 +53741,10 @@ msgid "Invert Selection"
 msgstr "Inverti Selezione"
 
 
+msgid "Tracking"
+msgstr "Tracciamento"
+
+
 msgid "Note:"
 msgstr "Nota:"
 
@@ -53835,6 +53819,16 @@ msgstr "Comunità Utenti"
 
 msgid "Failed to assign value: "
 msgstr "Impossibile impostare il valore: "
+
+
+msgctxt "Operator"
+msgid "Location"
+msgstr "Posizione"
+
+
+msgctxt "Operator"
+msgid "Rotation"
+msgstr "Rotazione"
 
 
 msgid "Unknown"
@@ -54258,14 +54252,6 @@ msgid "Mask Value"
 msgstr "Valore Maschera"
 
 
-msgid "CCW"
-msgstr "Senso Antiorario"
-
-
-msgid "CW"
-msgstr "Senso Orario"
-
-
 msgctxt "Operator"
 msgid "Copy Active to Selected Objects"
 msgstr "Copia Attivo a Oggetti Selezionati"
@@ -54635,11 +54621,6 @@ msgstr "Prima"
 msgctxt "Operator"
 msgid "After"
 msgstr "Dopo"
-
-
-msgctxt "Operator"
-msgid "Location"
-msgstr "Posizione"
 
 
 msgctxt "Operator"
@@ -55195,10 +55176,6 @@ msgid "Online Manual"
 msgstr "Manuale Online"
 
 
-msgid "Inputs:"
-msgstr "Ingressi:"
-
-
 msgctxt "Operator"
 msgid "Backdrop Zoom In"
 msgstr "Ingrandisci Sfondo"
@@ -55400,11 +55377,6 @@ msgstr "Ricarica Spezzoni e Aggiusta Lunghezza"
 msgctxt "Operator"
 msgid "Position"
 msgstr "Posizione"
-
-
-msgctxt "Operator"
-msgid "Rotation"
-msgstr "Rotazione"
 
 
 msgid "Tracker"
@@ -55757,16 +55729,16 @@ msgid "Auto-Keyframing"
 msgstr "Keyframing Automatico"
 
 
+msgid "Enable in New Scenes"
+msgstr "Abilita in Scene Nuove"
+
+
 msgid "Show Warning"
 msgstr "Mostra Avvisi"
 
 
 msgid "Only Insert Available"
 msgstr "Inserisce Solo Se Disponibile"
-
-
-msgid "Enable in New Scenes"
-msgstr "Abilita in Scene Nuove"
 
 
 msgid "Default Interpolation"
@@ -55842,6 +55814,10 @@ msgid "Pan Sensitivity"
 msgstr "Sensibilità Pan"
 
 
+msgid "Preferences:"
+msgstr "Preferenze:"
+
+
 msgid "Use Light"
 msgstr "Usa Luce"
 
@@ -55862,12 +55838,12 @@ msgid "Missing script files"
 msgstr "File di script mancanti"
 
 
+msgid "Error (see console)"
+msgstr "Errore (vedi console)"
+
+
 msgid ":"
 msgstr ":"
-
-
-msgid "Color Set %d"
-msgstr "Set Colori %d"
 
 
 msgid "Description:"
@@ -55902,25 +55878,13 @@ msgid "User:"
 msgstr "Utente:"
 
 
-msgid "description"
-msgstr "descrizione"
-
-
-msgid "location"
-msgstr "posizione"
+msgid "Color Set %d"
+msgstr "Set Colori %d"
 
 
 msgctxt "Operator"
 msgid "Documentation"
 msgstr "Documentazione"
-
-
-msgid "Preferences:"
-msgstr "Preferenze:"
-
-
-msgid "Error (see console)"
-msgstr "Errore (vedi console)"
 
 
 msgctxt "Operator"
@@ -56126,11 +56090,6 @@ msgstr "Griglia"
 msgctxt "Operator"
 msgid "Monkey"
 msgstr "Scimmia"
-
-
-msgctxt "Operator"
-msgid "Bezier"
-msgstr "Bezier"
 
 
 msgctxt "Operator"
@@ -56810,6 +56769,10 @@ msgid "Reference Point"
 msgstr "Punto di Riferimento"
 
 
+msgid "No Materials"
+msgstr "Nessun Materiale"
+
+
 msgctxt "Operator"
 msgid "Frame Selected (Quad View)"
 msgstr "Fotogramma Selezionato (4 Viste)"
@@ -57402,10 +57365,6 @@ msgid "Display action without any time remapping (when unpinned)"
 msgstr "Mostra l'azione senza nessuna rimappatura tempo (quando disappuntato)"
 
 
-msgid "Nothing selected"
-msgstr "Nessuna selezione"
-
-
 msgid "<invalid>"
 msgstr "<non valido>"
 
@@ -57563,16 +57522,6 @@ msgstr "Impossibile duplicare la selezione corrente"
 
 
 msgctxt "Curve"
-msgid "BezierCurve"
-msgstr "Curva Bezier"
-
-
-msgctxt "Curve"
-msgid "BezierCircle"
-msgstr "Cerchio Bezier"
-
-
-msgctxt "Curve"
 msgid "CurvePath"
 msgstr "Percorso Curva"
 
@@ -57690,10 +57639,6 @@ msgid "No strokes to paste, select and copy some points before trying again"
 msgstr "Nessun tratto da incollare, seleziona e copia alcuni punti e riprova"
 
 
-msgid "Can not paste strokes when active layer is hidden or locked"
-msgstr "Impossibile incollare i tratti quando il livello attivo è nascosto o bloccato"
-
-
 msgid "No grease pencil data"
 msgstr "Nessun dato matita"
 
@@ -57704,6 +57649,10 @@ msgstr "Nessun fotogramma da cancellare"
 
 msgid "No active frame(s) to delete"
 msgstr "Nessun fotogramma da cancellare"
+
+
+msgid "Nothing selected"
+msgstr "Nessuna selezione"
 
 
 msgid "No active area"
@@ -57928,40 +57877,20 @@ msgid "Internal error!"
 msgstr "Errore Interno!"
 
 
-msgid "Shortcut: %s"
-msgstr "Scorciatoia: %s"
-
-
-msgid "Python: %s"
-msgstr "Python: %s"
+msgid "Tool Keymap:"
+msgstr "Keymap Strumento:"
 
 
 msgid "(Shift-Click/Drag to select multiple)"
 msgstr "(Shift-Click/Trascina per selezione multipla)"
 
 
-msgid "Value: %s"
-msgstr "Valore: %s"
+msgid "Value: {}"
+msgstr "Valore: {}"
 
 
-msgid "Radians: %f"
-msgstr "Radianti: %f"
-
-
-msgid "Expression: %s"
-msgstr "Espressione: %s"
-
-
-msgid "Library: %s"
-msgstr "Libreria: %s"
-
-
-msgid "Disabled: %s"
-msgstr "Disabilitato: %s"
-
-
-msgid "Python: %s.%s"
-msgstr "Python: %s.%s"
+msgid "Expression: {}"
+msgstr "Espressione: {}"
 
 
 msgctxt "Operator"
@@ -58180,6 +58109,10 @@ msgstr "Naviga File Cache da collegare"
 
 msgid "Browse ID data to be linked"
 msgstr "Naviga Dati ID da collegare"
+
+
+msgid "File Not Found"
+msgstr "File Non Trovato"
 
 
 msgid "Modified"
@@ -58431,10 +58364,6 @@ msgstr "Nessuna selezione valida per l'estrusione"
 
 msgid "Invalid/unset axis"
 msgstr "Assi non validi/non selezionati"
-
-
-msgid "Confirm: Enter/LClick, Cancel: (Esc/RClick), Thickness: %s, Depth (Ctrl to tweak): %s (%s), Outset (O): (%s), Boundary (B): (%s), Individual (I): (%s)"
-msgstr "Conferma: Invio/ClickS, Annulla: (Esc/ClickD), Spessore: %s, Profondità (Ctrl per cambiare): %s (%s), Esterno (O): (%s), Confine (B): (%s), Facce Singole (I): (%s)"
 
 
 msgid "No intersections found"
@@ -60230,10 +60159,6 @@ msgid "No object selected"
 msgstr "Nessun oggetto selezionato"
 
 
-msgid "Auto Keying On"
-msgstr "Auto-Chiavi On"
-
-
 msgid "along X"
 msgstr "lungo X"
 
@@ -60272,6 +60197,10 @@ msgstr "bloccando Z %s"
 
 msgid "along local Z"
 msgstr "lungo Z locale"
+
+
+msgid "Auto Keying On"
+msgstr "Auto-Chiavi On"
 
 
 msgid " along Y axis"
@@ -60396,14 +60325,6 @@ msgstr "ScalaB: %s : %s : %s%s %s"
 
 msgid "ScaleB X: %s  Y: %s  Z: %s%s %s"
 msgstr "ScalaB X: %s  Y: %s  Z: %s%s %s"
-
-
-msgid "Bend Angle: %s Radius: %s Alt, Clamp %s"
-msgstr "Angolo Curvatura: %s Raggio: %s Alt, Blocca %s"
-
-
-msgid "Bend Angle: %.3f Radius: %.4f, Alt, Clamp %s"
-msgstr "Angolo Curvatura: %.3f Raggio: %.4f Alt, Blocca %s"
 
 
 msgid "Envelope: %s"
@@ -61560,10 +61481,6 @@ msgstr "Permetti Esecuzione"
 
 msgid "Don't Save"
 msgstr "Non Salvare"
-
-
-msgid "File Not Found"
-msgstr "File Non Trovato"
 
 
 msgid "unable to open the file"

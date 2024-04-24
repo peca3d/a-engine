@@ -21,7 +21,7 @@
 
 #include "BKE_context.hh"
 #include "BKE_editmesh.hh"
-#include "BKE_layer.h"
+#include "BKE_layer.hh"
 #include "BKE_mask.h"
 #include "BKE_scene.h"
 
@@ -49,7 +49,7 @@
 
 #include "RNA_access.hh"
 
-#include "BLF_api.h"
+#include "BLF_api.hh"
 #include "BLT_translation.h"
 
 #include "transform.hh"
@@ -528,7 +528,7 @@ static void viewRedrawPost(bContext *C, TransInfo *t)
   ED_area_status_text(t->area, nullptr);
 
   if (t->spacetype == SPACE_VIEW3D) {
-    /* if autokeying is enabled, send notifiers that keyframes were added */
+    /* If auto-keying is enabled, send notifiers that keyframes were added. */
     if (blender::animrig::is_autokey_on(t->scene)) {
       WM_main_add_notifier(NC_ANIMATION | ND_KEYFRAME | NA_EDITED, nullptr);
     }
@@ -712,6 +712,13 @@ static bool transform_modal_item_poll(const wmOperator *op, int value)
       break;
     }
     case TFM_MODAL_PASSTHROUGH_NAVIGATE:
+      if (ELEM(t->mode, TFM_EDGE_SLIDE, TFM_VERT_SLIDE)) {
+        /* Returning `false` will not prevent the navigation from working, it will just not display
+         * the shortcut in the header.
+         * Return `false` here to prevent this modal item from affecting the state with
+         * #T_ALT_TRANSFORM used by the Edge and Vert Slide operators. */
+        return false;
+      }
       return t->vod != nullptr;
   }
   return true;
@@ -883,30 +890,30 @@ static bool transform_event_modal_constraint(TransInfo *t, short modal_type)
   /* Initialize */
   switch (modal_type) {
     case TFM_MODAL_AXIS_X:
-      msg_2d = RPT_("along X");
-      msg_3d = RPT_("along %s X");
+      msg_2d = IFACE_("along X");
+      msg_3d = IFACE_("along %s X");
       constraint_new = CON_AXIS0;
       break;
     case TFM_MODAL_AXIS_Y:
-      msg_2d = RPT_("along Y");
-      msg_3d = RPT_("along %s Y");
+      msg_2d = IFACE_("along Y");
+      msg_3d = IFACE_("along %s Y");
       constraint_new = CON_AXIS1;
       break;
     case TFM_MODAL_AXIS_Z:
-      msg_2d = RPT_("along Z");
-      msg_3d = RPT_("along %s Z");
+      msg_2d = IFACE_("along Z");
+      msg_3d = IFACE_("along %s Z");
       constraint_new = CON_AXIS2;
       break;
     case TFM_MODAL_PLANE_X:
-      msg_3d = RPT_("locking %s X");
+      msg_3d = IFACE_("locking %s X");
       constraint_new = CON_AXIS1 | CON_AXIS2;
       break;
     case TFM_MODAL_PLANE_Y:
-      msg_3d = RPT_("locking %s Y");
+      msg_3d = IFACE_("locking %s Y");
       constraint_new = CON_AXIS0 | CON_AXIS2;
       break;
     case TFM_MODAL_PLANE_Z:
-      msg_3d = RPT_("locking %s Z");
+      msg_3d = IFACE_("locking %s Z");
       constraint_new = CON_AXIS0 | CON_AXIS1;
       break;
     default:
@@ -1250,7 +1257,7 @@ int transformEvent(TransInfo *t, const wmEvent *event)
             if (t->options & CTX_CAMERA) {
               /* Exception for switching to dolly, or trackball, in camera view. */
               if (t->mode == TFM_TRANSLATION) {
-                setLocalConstraint(t, (CON_AXIS2), RPT_("along local Z"));
+                setLocalConstraint(t, (CON_AXIS2), IFACE_("along local Z"));
               }
               else if (t->mode == TFM_ROTATION) {
                 restoreTransObjects(t);
@@ -1496,7 +1503,20 @@ static void drawTransformView(const bContext * /*C*/, ARegion *region, void *arg
   GPU_line_width(1.0f);
 
   drawConstraint(t);
-  drawPropCircle(t);
+
+  switch (t->spacetype) {
+    case SPACE_GRAPH:
+    case SPACE_ACTION:
+      /* Different visualization because the proportional editing in these editors only looks at
+       * the x-axis. */
+      drawPropRange(t);
+      break;
+
+    default:
+      drawPropCircle(t);
+      break;
+  }
+
   drawSnapping(t);
 
   if (region == t->region && t->mode_info && t->mode_info->draw_fn) {
@@ -1504,8 +1524,10 @@ static void drawTransformView(const bContext * /*C*/, ARegion *region, void *arg
   }
 }
 
-/* just draw a little warning message in the top-right corner of the viewport
- * to warn that autokeying is enabled */
+/**
+ * Just draw a little warning message in the top-right corner of the viewport
+ * to warn that auto-keying is enabled.
+ */
 static void drawAutoKeyWarning(TransInfo *t, ARegion *region)
 {
   const char *printable = IFACE_("Auto Keying On");
@@ -1557,7 +1579,7 @@ static void drawAutoKeyWarning(TransInfo *t, ARegion *region)
   uchar color[3];
   UI_GetThemeColorShade3ubv(TH_TEXT_HI, -50, color);
   BLF_color3ubv(font_id, color);
-  BLF_draw_default(xco, yco, 0.0f, printable, BLF_DRAW_STR_DUMMY_MAX);
+  BLF_draw_default_shadowed(xco, yco, 0.0f, printable, BLF_DRAW_STR_DUMMY_MAX);
 
   /* autokey recording icon... */
   GPU_blend(GPU_BLEND_ALPHA);

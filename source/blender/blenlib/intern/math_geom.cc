@@ -156,7 +156,7 @@ float cross_poly_v2(const float verts[][2], uint nr)
   co_curr = verts[0];
   cross = 0.0f;
   for (a = 0; a < nr; a++) {
-    cross += (co_curr[0] - co_prev[0]) * (co_curr[1] + co_prev[1]);
+    cross += (co_prev[0] - co_curr[0]) * (co_curr[1] + co_prev[1]);
     co_prev = co_curr;
     co_curr += 2;
   }
@@ -1260,8 +1260,8 @@ int isect_seg_seg_v2_point_ex(const float v0[2],
     if (equals_v2v2(v0, v1)) {
       if (len_squared_v2v2(v2, v3) > square_f(eps)) {
         /* use non-point segment as basis */
-        SWAP(const float *, v0, v2);
-        SWAP(const float *, v1, v3);
+        std::swap(v0, v2);
+        std::swap(v1, v3);
 
         sub_v2_v2v2(s10, v1, v0);
         sub_v2_v2v2(s30, v3, v0);
@@ -1283,7 +1283,7 @@ int isect_seg_seg_v2_point_ex(const float v0[2],
     u_b = dot_v2v2(s30, s10) / dot_v2v2(s10, s10);
 
     if (u_a > u_b) {
-      SWAP(float, u_a, u_b);
+      std::swap(u_a, u_b);
     }
 
     if (u_a > endpoint_max || u_b < endpoint_min) {
@@ -1517,19 +1517,14 @@ bool isect_point_tri_v2_cw(const float pt[2],
 
 int isect_point_tri_v2(const float pt[2], const float v1[2], const float v2[2], const float v3[2])
 {
-  if (line_point_side_v2(v1, v2, pt) >= 0.0f) {
-    if (line_point_side_v2(v2, v3, pt) >= 0.0f) {
-      if (line_point_side_v2(v3, v1, pt) >= 0.0f) {
-        return 1;
-      }
-    }
+  float side12 = line_point_side_v2(v1, v2, pt);
+  float side23 = line_point_side_v2(v2, v3, pt);
+  float side31 = line_point_side_v2(v3, v1, pt);
+  if (side12 >= 0.0f && side23 >= 0.0f && side31 >= 0.0f) {
+    return 1;
   }
-  else {
-    if (!(line_point_side_v2(v2, v3, pt) >= 0.0f)) {
-      if (!(line_point_side_v2(v3, v1, pt) >= 0.0f)) {
-        return -1;
-      }
-    }
+  if (side12 <= 0.0f && side23 <= 0.0f && side31 <= 0.0f) {
+    return -1;
   }
 
   return 0;
@@ -1538,25 +1533,16 @@ int isect_point_tri_v2(const float pt[2], const float v1[2], const float v2[2], 
 int isect_point_quad_v2(
     const float pt[2], const float v1[2], const float v2[2], const float v3[2], const float v4[2])
 {
-  if (line_point_side_v2(v1, v2, pt) >= 0.0f) {
-    if (line_point_side_v2(v2, v3, pt) >= 0.0f) {
-      if (line_point_side_v2(v3, v4, pt) >= 0.0f) {
-        if (line_point_side_v2(v4, v1, pt) >= 0.0f) {
-          return 1;
-        }
-      }
-    }
+  float side12 = line_point_side_v2(v1, v2, pt);
+  float side23 = line_point_side_v2(v2, v3, pt);
+  float side34 = line_point_side_v2(v3, v4, pt);
+  float side41 = line_point_side_v2(v4, v1, pt);
+  if (side12 >= 0.0f && side23 >= 0.0f && side34 >= 0.0f && side41 >= 0.0f) {
+    return 1;
   }
-  else {
-    if (!(line_point_side_v2(v2, v3, pt) >= 0.0f)) {
-      if (!(line_point_side_v2(v3, v4, pt) >= 0.0f)) {
-        if (!(line_point_side_v2(v4, v1, pt) >= 0.0f)) {
-          return -1;
-        }
-      }
-    }
+  if (side12 <= 0.0f && side23 <= 0.0f && side34 <= 0.0f && side41 <= 0.0f) {
+    return -1;
   }
-
   return 0;
 }
 
@@ -1712,22 +1698,33 @@ bool isect_ray_tri_v3(const float ray_origin[3],
   return true;
 }
 
+bool isect_ray_plane_v3_factor(const float ray_origin[3],
+                               const float ray_direction[3],
+                               const float plane_co[3],
+                               const float plane_no[3],
+                               float *r_lambda)
+{
+  float h[3];
+  float dot = dot_v3v3(plane_no, ray_direction);
+  if (dot == 0.0f) {
+    return false;
+  }
+  sub_v3_v3v3(h, ray_origin, plane_co);
+  *r_lambda = -dot_v3v3(plane_no, h) / dot;
+  return true;
+}
+
 bool isect_ray_plane_v3(const float ray_origin[3],
                         const float ray_direction[3],
                         const float plane[4],
                         float *r_lambda,
                         const bool clip)
 {
-  float h[3], plane_co[3];
-  float dot;
-
-  dot = dot_v3v3(plane, ray_direction);
-  if (dot == 0.0f) {
+  float plane_co[3], plane_no[3];
+  plane_to_point_vector_v3(plane, plane_co, plane_no);
+  if (!isect_ray_plane_v3_factor(ray_origin, ray_direction, plane_co, plane_no, r_lambda)) {
     return false;
   }
-  mul_v3_v3fl(plane_co, plane, (-plane[3] / len_squared_v3(plane)));
-  sub_v3_v3v3(h, ray_origin, plane_co);
-  *r_lambda = -dot_v3v3(plane, h) / dot;
   if (clip && (*r_lambda < 0.0f)) {
     return false;
   }
@@ -1795,7 +1792,7 @@ void isect_ray_tri_watertight_v3_precalc(IsectRayPrecalc *isect_precalc,
 
   /* Swap kx and ky dimensions to preserve winding direction of triangles. */
   if (ray_direction[kz] < 0.0f) {
-    SWAP(int, kx, ky);
+    std::swap(kx, ky);
   }
 
   /* Calculate the shear constants. */
@@ -2320,9 +2317,9 @@ bool isect_tri_tri_v3_ex(const float tri_a[3][3],
       double offset1 = fac1 * (dot_c - dot_b);
       if (offset0 > offset1) {
         /* Sort min max. */
-        SWAP(double, offset0, offset1);
-        SWAP(float, fac0, fac1);
-        SWAP(int, tri_i[0], tri_i[2]);
+        std::swap(offset0, offset1);
+        std::swap(fac0, fac1);
+        std::swap(tri_i[0], tri_i[2]);
       }
 
       range[i].min = float(dot_b + offset0);
@@ -2586,7 +2583,7 @@ static bool getLowestRoot(
 
     /* Sort so x1 <= x2 */
     if (r1 > r2) {
-      SWAP(float, r1, r2);
+      std::swap(r1, r2);
     }
 
     /* Get lowest root: */
@@ -2669,7 +2666,7 @@ bool isect_sweeping_sphere_tri_v3(const float p1[3],
     float t1 = (-a - radius) / nordotv;
 
     if (t0 > t1) {
-      SWAP(float, t0, t1);
+      std::swap(t0, t1);
     }
 
     if (t0 > 1.0f || t1 < 0.0f) {
@@ -3646,7 +3643,7 @@ void interp_weights_quad_v3(float w[4],
     cross_v3_v3v3(n, n1, n2);
 
     ok = barycentric_weights(v1, v2, v4, co, n, w);
-    SWAP(float, w[2], w[3]);
+    std::swap(w[2], w[3]);
 
     if (!ok || (w[0] < 0.0f)) {
       /* if w[1] is negative, co is on the other side of the v1-v3 edge,

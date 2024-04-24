@@ -623,8 +623,12 @@ typedef struct bUserExtensionRepo {
    */
   char module[48];
 
-  char dirpath[1024];     /* FILE_MAX */
-  char remote_path[1024]; /* FILE_MAX */
+  /**
+   * The "local" directory where extensions are stored.
+   * When unset, use `{BLENDER_RESOURCE_PATH_USER}/extensions/{bUserExtensionRepo::module}`.
+   */
+  char custom_dirpath[1024]; /* FILE_MAX */
+  char remote_path[1024];    /* FILE_MAX */
 
   int flag;
   char _pad0[4];
@@ -634,6 +638,8 @@ typedef enum eUserExtensionRepo_Flag {
   /** Maintain disk cache. */
   USER_EXTENSION_REPO_FLAG_NO_CACHE = 1 << 0,
   USER_EXTENSION_REPO_FLAG_DISABLED = 1 << 1,
+  USER_EXTENSION_REPO_FLAG_USE_CUSTOM_DIRECTORY = 1 << 2,
+  USER_EXTENSION_REPO_FLAG_USE_REMOTE_PATH = 1 << 3,
 } eUserExtensionRepo_Flag;
 
 typedef struct SolidLight {
@@ -700,6 +706,8 @@ typedef struct UserDef_Experimental {
   char no_asset_indexing;
   char use_viewport_debug;
   char use_all_linked_data_direct;
+  char disable_material_icon;
+  char disable_search_on_keypress;
   char SANITIZE_AFTER_HERE;
   /* The following options are automatically sanitized (set to 0)
    * when the release cycle is not alpha. */
@@ -715,7 +723,7 @@ typedef struct UserDef_Experimental {
   char use_shader_node_previews;
   char use_extension_repos;
 
-  char _pad[4];
+  char _pad[2];
   /** `makesdna` does not allow empty structs. */
 } UserDef_Experimental;
 
@@ -1197,7 +1205,7 @@ typedef enum eUserpref_UI_Flag {
   USER_HIDE_DOT = (1 << 16),
   USER_SHOW_GIZMO_NAVIGATE = (1 << 17),
   USER_SHOW_VIEWPORTNAME = (1 << 18),
-  USER_UIFLAG_UNUSED_3 = (1 << 19), /* Cleared. */
+  USER_ACCUMULATE_TRACKBALL = (1 << 19),
   USER_ZOOM_TO_MOUSEPOS = (1 << 20),
   USER_SHOW_FPS = (1 << 21),
   USER_REGISTER_ALL_USERS = (1 << 22),
@@ -1298,7 +1306,7 @@ typedef enum eKeying_Flag {
   KEYING_FLAG_XYZ2RGB = (1 << 3),
   KEYING_FLAG_CYCLEAWARE = (1 << 8),
 
-  /* Autokey options. */
+  /* Auto-key options. */
   AUTOKEY_FLAG_INSERTAVAILABLE = (1 << 0),
   AUTOKEY_FLAG_INSERTNEEDED = (1 << 1),
   AUTOKEY_FLAG_ONLYKEYINGSET = (1 << 6),

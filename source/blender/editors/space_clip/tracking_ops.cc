@@ -36,8 +36,8 @@
 
 #include "BLT_translation.h"
 
-#include "IMB_imbuf.h"
-#include "IMB_imbuf_types.h"
+#include "IMB_imbuf.hh"
+#include "IMB_imbuf_types.hh"
 
 #include "clip_intern.h"
 #include "tracking_ops_intern.h"
@@ -146,7 +146,7 @@ void CLIP_OT_add_marker(wmOperatorType *ot)
 
 static int add_marker_at_click_invoke(bContext *C, wmOperator *op, const wmEvent * /*event*/)
 {
-  ED_workspace_status_text(C, RPT_("Use LMB click to define location where place the marker"));
+  ED_workspace_status_text(C, IFACE_("Use LMB click to define location where place the marker"));
 
   /* Add modal handler for ESC. */
   WM_event_add_modal_handler(C, op);

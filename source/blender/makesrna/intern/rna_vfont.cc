@@ -10,7 +10,7 @@
 
 #include "RNA_define.hh"
 
-#include "rna_internal.h"
+#include "rna_internal.hh"
 
 #include "DNA_vfont_types.h"
 
@@ -26,7 +26,7 @@
 #  include "WM_api.hh"
 
 /* Matching function in rna_ID.cc */
-static int rna_VectorFont_filepath_editable(PointerRNA *ptr, const char ** /*r_info*/)
+static int rna_VectorFont_filepath_editable(const PointerRNA *ptr, const char ** /*r_info*/)
 {
   VFont *vfont = (VFont *)ptr->owner_id;
   if (BKE_vfont_is_builtin(vfont)) {

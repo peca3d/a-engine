@@ -21,11 +21,14 @@
 #include "BKE_geometry_fields.hh"
 #include "BKE_geometry_set.hh"
 #include "BKE_idprop.hh"
+#include "BKE_node_enum.hh"
 #include "BKE_node_runtime.hh"
 #include "BKE_node_socket_value.hh"
 #include "BKE_type_conversions.hh"
 
 #include "FN_lazy_function_execute.hh"
+
+#include "UI_resources.hh"
 
 namespace lf = blender::fn::lazy_function;
 namespace geo_log = blender::nodes::geo_eval_log;
@@ -157,10 +160,58 @@ bool socket_type_has_attribute_toggle(const eNodeSocketDatatype type)
 
 bool input_has_attribute_toggle(const bNodeTree &node_tree, const int socket_index)
 {
+  node_tree.ensure_interface_cache();
+  const bNodeSocketType *typeinfo = node_tree.interface_inputs()[socket_index]->socket_typeinfo();
+  if (ELEM(typeinfo->type, SOCK_MENU)) {
+    return false;
+  }
+
   BLI_assert(node_tree.runtime->field_inferencing_interface);
   const nodes::FieldInferencingInterface &field_interface =
       *node_tree.runtime->field_inferencing_interface;
   return field_interface.inputs[socket_index] != nodes::InputSocketFieldType::None;
+}
+
+static void id_property_int_update_enum_items(const bNodeSocketValueMenu *value,
+                                              IDPropertyUIDataInt *ui_data)
+{
+  int idprop_items_num = 0;
+  IDPropertyUIDataEnumItem *idprop_items = nullptr;
+
+  if (value->enum_items && !value->enum_items->items.is_empty()) {
+    const Span<bke::RuntimeNodeEnumItem> items = value->enum_items->items;
+    idprop_items_num = items.size();
+    idprop_items = MEM_cnew_array<IDPropertyUIDataEnumItem>(items.size(), __func__);
+    for (const int i : items.index_range()) {
+      const bke::RuntimeNodeEnumItem &item = items[i];
+      IDPropertyUIDataEnumItem &idprop_item = idprop_items[i];
+      idprop_item.value = item.identifier;
+      /* TODO: The name may not be unique!
+       * We require a unique identifier string for IDProperty and RNA enums,
+       * so node enums should probably have this too. */
+      idprop_item.identifier = BLI_strdup_null(item.name.c_str());
+      idprop_item.name = BLI_strdup_null(item.name.c_str());
+      idprop_item.description = BLI_strdup_null(item.description.c_str());
+      idprop_item.icon = ICON_NONE;
+    }
+  }
+
+  /* Fallback: if no items are defined, use a dummy item so the id property is not shown as a plain
+   * int value. */
+  if (idprop_items_num == 0) {
+    idprop_items_num = 1;
+    idprop_items = MEM_cnew_array<IDPropertyUIDataEnumItem>(1, __func__);
+    idprop_items->value = 0;
+    idprop_items->identifier = BLI_strdup("DUMMY");
+    idprop_items->name = BLI_strdup("");
+    idprop_items->description = BLI_strdup("");
+    idprop_items->icon = ICON_NONE;
+  }
+
+  /* Node enum definitions should already be valid. */
+  BLI_assert(IDP_EnumItemsValidate(idprop_items, idprop_items_num, nullptr));
+  ui_data->enum_items = idprop_items;
+  ui_data->enum_items_num = idprop_items_num;
 }
 
 std::unique_ptr<IDProperty, bke::idprop::IDPropertyDeleter> id_property_create_from_socket(
@@ -259,6 +310,14 @@ std::unique_ptr<IDProperty, bke::idprop::IDPropertyDeleter> id_property_create_f
       ui_data->default_value = BLI_strdup(value->value);
       return property;
     }
+    case SOCK_MENU: {
+      const bNodeSocketValueMenu *value = static_cast<const bNodeSocketValueMenu *>(
+          socket.socket_data);
+      auto property = bke::idprop::create(identifier, value->value);
+      IDPropertyUIDataInt *ui_data = (IDPropertyUIDataInt *)IDP_ui_data_ensure(property.get());
+      id_property_int_update_enum_items(value, ui_data);
+      return property;
+    }
     case SOCK_OBJECT: {
       const bNodeSocketValueObject *value = static_cast<const bNodeSocketValueObject *>(
           socket.socket_data);
@@ -319,6 +378,8 @@ bool id_property_type_matches_socket(const bNodeTreeInterfaceSocket &socket,
       return property.type == IDP_BOOLEAN;
     case SOCK_STRING:
       return property.type == IDP_STRING;
+    case SOCK_MENU:
+      return property.type == IDP_INT;
     case SOCK_OBJECT:
     case SOCK_COLLECTION:
     case SOCK_TEXTURE:
@@ -412,6 +473,11 @@ static void init_socket_cpp_value_from_property(const IDProperty &property,
     }
     case SOCK_STRING: {
       std::string value = IDP_String(&property);
+      new (r_value) bke::SocketValueVariant(std::move(value));
+      break;
+    }
+    case SOCK_MENU: {
+      int value = IDP_Int(&property);
       new (r_value) bke::SocketValueVariant(std::move(value));
       break;
     }
@@ -565,7 +631,7 @@ static MultiValueMap<bke::AttrDomain, OutputAttributeInfo> find_output_attribute
 
     const int index = socket->index();
     bke::SocketValueVariant &value_variant = *output_values[index].get<bke::SocketValueVariant>();
-    const fn::GField field = value_variant.extract<fn::GField>();
+    const fn::GField field = value_variant.get<fn::GField>();
 
     const bNodeTreeInterfaceSocket *interface_socket = tree.interface_outputs()[index];
     const bke::AttrDomain domain = bke::AttrDomain(interface_socket->attribute_domain);
@@ -583,7 +649,8 @@ static MultiValueMap<bke::AttrDomain, OutputAttributeInfo> find_output_attribute
  */
 static Vector<OutputAttributeToStore> compute_attributes_to_store(
     const bke::GeometrySet &geometry,
-    const MultiValueMap<bke::AttrDomain, OutputAttributeInfo> &outputs_by_domain)
+    const MultiValueMap<bke::AttrDomain, OutputAttributeInfo> &outputs_by_domain,
+    const bool do_instances)
 {
   Vector<OutputAttributeToStore> attributes_to_store;
   for (const auto component_type : {bke::GeometryComponent::Type::Mesh,
@@ -592,6 +659,9 @@ static Vector<OutputAttributeToStore> compute_attributes_to_store(
                                     bke::GeometryComponent::Type::Instance})
   {
     if (!geometry.has(component_type)) {
+      continue;
+    }
+    if (!do_instances && component_type == bke::GeometryComponent::Type::Instance) {
       continue;
     }
     const bke::GeometryComponent &component = *geometry.get_component(component_type);
@@ -675,9 +745,16 @@ static void store_output_attributes(bke::GeometrySet &geometry,
    * necessary because some fields might depend on attributes that are overwritten. */
   MultiValueMap<bke::AttrDomain, OutputAttributeInfo> outputs_by_domain =
       find_output_attributes_to_store(tree, properties, output_values);
-  Vector<OutputAttributeToStore> attributes_to_store = compute_attributes_to_store(
-      geometry, outputs_by_domain);
-  store_computed_output_attributes(geometry, attributes_to_store);
+  if (outputs_by_domain.size() == 0) {
+    return;
+  }
+  geometry.modify_geometry_sets([&](bke::GeometrySet &instance_geometry) {
+    /* Instance attributes should only be created for the top-level geometry. */
+    const bool do_instances = &geometry == &instance_geometry;
+    Vector<OutputAttributeToStore> attributes_to_store = compute_attributes_to_store(
+        instance_geometry, outputs_by_domain, do_instances);
+    store_computed_output_attributes(instance_geometry, attributes_to_store);
+  });
 }
 
 bke::GeometrySet execute_geometry_nodes_on_geometry(const bNodeTree &btree,

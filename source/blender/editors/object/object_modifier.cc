@@ -16,6 +16,7 @@
 
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
+#include "DNA_array_utils.hh"
 #include "DNA_curve_types.h"
 #include "DNA_dynamicpaint_types.h"
 #include "DNA_fluid_types.h"
@@ -49,13 +50,13 @@
 #include "BKE_global.h"
 #include "BKE_gpencil_modifier_legacy.h"
 #include "BKE_idprop.h"
-#include "BKE_key.h"
+#include "BKE_key.hh"
 #include "BKE_lattice.hh"
-#include "BKE_layer.h"
+#include "BKE_layer.hh"
 #include "BKE_lib_id.hh"
 #include "BKE_main.hh"
 #include "BKE_material.h"
-#include "BKE_mball.h"
+#include "BKE_mball.hh"
 #include "BKE_mesh.hh"
 #include "BKE_mesh_mapping.hh"
 #include "BKE_mesh_runtime.hh"
@@ -196,6 +197,7 @@ ModifierData *ED_object_modifier_add(
     else {
       BLI_addtail(&ob->modifiers, new_md);
     }
+    BKE_modifiers_persistent_uid_init(*ob, *new_md);
 
     if (name) {
       STRNCPY_UTF8(new_md->name, name);
@@ -1233,6 +1235,7 @@ bool ED_object_modifier_copy(
   BKE_modifier_copydata(md, nmd);
   BLI_insertlinkafter(&ob->modifiers, md, nmd);
   BKE_modifier_unique_name(&ob->modifiers, nmd);
+  BKE_modifiers_persistent_uid_init(*ob, *nmd);
   BKE_object_modifier_set_active(ob, nmd);
 
   nmd->flag |= eModifierFlag_OverrideLibrary_Local;
@@ -3023,6 +3026,7 @@ static int skin_armature_create_exec(bContext *C, wmOperator *op)
   if (arm_md) {
     skin_md = edit_modifier_property_get(op, ob, eModifierType_Skin);
     BLI_insertlinkafter(&ob->modifiers, skin_md, arm_md);
+    BKE_modifiers_persistent_uid_init(*arm_ob, arm_md->modifier);
 
     arm_md->object = arm_ob;
     arm_md->deformflag = ARM_DEF_VGROUP | ARM_DEF_QUATERNION;

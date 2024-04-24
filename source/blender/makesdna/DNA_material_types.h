@@ -383,14 +383,16 @@ enum {
   MA_BS_HASHED = 3,
 };
 
+enum {
+  MA_SHADOW_ID = (1 << 0)
+};
+
 /** #Material::displacement_method */
 enum {
   MA_DISPLACEMENT_BUMP = 0,
   MA_DISPLACEMENT_DISPLACE = 1,
   MA_DISPLACEMENT_BOTH = 2,
 };
-
-#define MA_SHADOW_ID (1 << 0)
 
 /* Grease Pencil Stroke styles */
 enum {

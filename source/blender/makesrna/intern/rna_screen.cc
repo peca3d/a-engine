@@ -12,7 +12,7 @@
 #include "RNA_define.hh"
 #include "RNA_enum_types.hh"
 
-#include "rna_internal.h"
+#include "rna_internal.hh"
 
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
@@ -299,7 +299,8 @@ static PointerRNA rna_Region_data_get(PointerRNA *ptr)
   return PointerRNA_NULL;
 }
 
-static int rna_region_active_panel_category_editable_get(PointerRNA *ptr, const char **r_info)
+static int rna_region_active_panel_category_editable_get(const PointerRNA *ptr,
+                                                         const char **r_info)
 {
   ARegion *region = static_cast<ARegion *>(ptr->data);
   if (BLI_listbase_is_empty(&region->panels_category)) {
